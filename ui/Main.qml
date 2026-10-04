@@ -105,7 +105,10 @@ ApplicationWindow {
         ColumnLayout {
             anchors.fill: parent
             TextField { id: textInput; placeholderText: tx("dialog.enter_text"); Layout.preferredWidth: 380 }
-            RowLayout { Label { text: tx("dialog.size") }; SpinBox { id: fontSize; from: 8; to: 96; value: 18 } }
+            RowLayout {
+                Label { text: tx("dialog.size") }
+                SpinBox { id: fontSize; from: 8; to: 96; value: 18 }
+            }
         }
         footer: DialogButtonBox {
             Button { text: tx("dialog.cancel"); onClicked: textDlg.reject() }
@@ -125,7 +128,10 @@ ApplicationWindow {
         ColumnLayout {
             anchors.fill: parent
             TextField { id: waterText; placeholderText: tx("dialog.watermark_placeholder"); Layout.preferredWidth: 380 }
-            RowLayout { Label { text: tx("dialog.opacity") }; Slider { id: waterOpacity; from: 10; to: 90; value: 35; Layout.fillWidth: true } }
+            RowLayout {
+                Label { text: tx("dialog.opacity") }
+                Slider { id: waterOpacity; from: 10; to: 90; value: 35; Layout.fillWidth: true }
+            }
         }
         footer: DialogButtonBox {
             Button { text: tx("dialog.cancel"); onClicked: waterDlg.reject() }

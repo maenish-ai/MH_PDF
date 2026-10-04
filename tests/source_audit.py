@@ -4,6 +4,7 @@ root=Path(__file__).resolve().parents[1]
 cpp=(root/'core/PdfDocument.cpp').read_text(encoding='utf-8')
 h=(root/'core/PdfDocument.h').read_text(encoding='utf-8')
 cm=(root/'CMakeLists.txt').read_text(encoding='utf-8')
+qml=(root/'ui/Main.qml').read_text(encoding='utf-8')
 checks={
  'C++ delimiter balance':all((f.read_text(encoding='utf-8').count('{')==f.read_text(encoding='utf-8').count('}') and f.read_text(encoding='utf-8').count('(')==f.read_text(encoding='utf-8').count(')')) for f in (root/'core').glob('*.cpp')),
  'no duplicated rotate command':'m_undo.push(new LambdaCommand(QStringLiteral(\"Rotate page\"),\n    m_undo.push' not in cpp,
@@ -21,6 +22,7 @@ checks={
  'architecture doc':(root/'ARCHITECTURE.md').exists(),
  'quality gate':(root/'QUALITY.md').exists(),
  'undo core operations':all(x in cpp for x in ['Add blank page','Paste page','Combine PDF','Watermark','Page numbers']),
+ 'QML child objects do not use semicolon separators':re.search(r'\}\s*;\s*[A-Z][A-Za-z0-9_]*\s*\{', qml) is None,
 }
 for name,ok in checks.items(): print(('PASS' if ok else 'FAIL'),name)
 sys.exit(0 if all(checks.values()) else 1)
