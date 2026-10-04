@@ -14,3 +14,11 @@ Run locally before every push:
 ```bash
 python scripts/preflight.py
 ```
+## GitHub Actions run #3 diagnosis (2026-10-04)
+
+The third hosted build confirmed that the Windows generator/toolchain is now correct (MSVC 2022) and QtPdf installs successfully. Two later blockers were identified and fixed in this bundle:
+
+- Windows: `QPdfDocument::render()` and `getAllText()` are non-const in Qt 6.11. The backend now keeps the document `mutable` so logically read-only backend operations can use Qt's internal caches without discarding the const backend API.
+- Android: Qt cross-compilation now passes `QT_HOST_PATH` to the host desktop Qt installed by `aqt --autodesktop`, and validates that host Qt before CMake configure.
+
+These fixes are also guarded by the source/release audits. The next GitHub Actions run remains the authoritative native compile/package check.

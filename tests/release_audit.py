@@ -5,6 +5,7 @@ required=['.github/workflows/ci.yml','android/AndroidManifest.xml','android/READ
 checks={f'file:{x}':(root/x).exists() for x in required}
 cm=(root/'CMakeLists.txt').read_text(encoding='utf-8')
 wf=(root/'.github/workflows/ci.yml').read_text(encoding='utf-8')
+play=(root/'.github/workflows/play-release.yml').read_text(encoding='utf-8')
 manifest=(root/'android/AndroidManifest.xml').read_text(encoding='utf-8')
 ard=(root/'android/README.md').read_text(encoding='utf-8')
 checks.update({
@@ -18,7 +19,10 @@ checks.update({
  'Windows build':'windows-2022' in wf and 'windeployqt' in wf,
  'Windows compiler matches Qt MSVC kit':'Visual Studio 17 2022' in wf and '-A x64' in wf and 'build/Release/OrbisPDF.exe' in wf,
  'Android APK/AAB':'--target apk' in wf and '--target aab' in wf,
- 'Android setup avoids obsolete SDK tools package':'packages: platform-tools' in wf,
+ 'Android setup avoids obsolete SDK tools package':'packages: platform-tools' in wf and 'packages: platform-tools' in play,
+ 'Android cross-compile host Qt path':'-DQT_HOST_PATH="$RUNNER_TEMP/Qt/${QT_VERSION}/gcc_64"' in wf and '-DQT_HOST_PATH="$RUNNER_TEMP/Qt/${QT_VERSION}/gcc_64"' in play,
+ 'Android host Qt validated':'gcc_64/lib/cmake/Qt6/Qt6Config.cmake' in wf and 'gcc_64/lib/cmake/Qt6/Qt6Config.cmake' in play,
+ 'Play workflow uses Java 21 action v5':'actions/setup-java@v5' in play and "java-version: '21'" in play,
  'audit before builds':wf.count('needs: source-audit') >= 2,
  'QtPdf extension requested':'-m qtpdf' in wf and 'aqtinstall.git' in wf,
  'Android manifest Qt lib metadata':'android.app.lib_name' in manifest,

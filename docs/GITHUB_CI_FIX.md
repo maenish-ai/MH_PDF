@@ -11,3 +11,11 @@ running CMake so a dependency-install problem is reported clearly before compila
 
 If GitHub later ships a fixed stable aqtinstall/install-qt-action combination, this workaround
 can be replaced with a pinned stable release after CI validation.
+## v6.0.3 code/build correction
+
+Run #3 progressed past Qt installation, QML parsing, Windows generator selection, and Android SDK setup. It exposed two real blockers:
+
+1. Qt 6.11 declares `QPdfDocument::render()` and `getAllText()` as non-const. `QtPdfBackend` now stores `m_doc` as `mutable`, preserving the const read-only backend contract while allowing Qt to update internal caches.
+2. Android target Qt requires a host Qt when cross-compiling. Both CI and Play workflows now pass `-DQT_HOST_PATH="$RUNNER_TEMP/Qt/${QT_VERSION}/gcc_64"` and validate the host installation created by `--autodesktop`.
+
+Do not remove these guards unless the Qt backend/API or Android toolchain architecture changes.

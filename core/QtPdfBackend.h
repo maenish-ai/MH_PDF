@@ -12,5 +12,6 @@ public:
     QString pageText(int page) const override;
     QVariantList search(const QString &needle, int maxResults = 200) const override;
 private:
-    QPdfDocument m_doc;
+    // Qt 6.11 render()/getAllText() update internal caches even for logical read operations.
+    mutable QPdfDocument m_doc;
 };
