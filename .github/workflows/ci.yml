@@ -1,0 +1,130 @@
+name: Orbis PDF CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: orbis-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  QT_VERSION: '6.11.2'
+  ANDROID_API: '36'
+  ANDROID_MIN_API: '28'
+  ANDROID_NDK: '27.2.12479018'
+
+jobs:
+  source-audit:
+    name: Source, localization and release audit
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run release gates
+        run: |
+          python tests/source_audit.py
+          python tests/localization_audit.py
+          python tests/release_audit.py
+          python tests/engine_v6_audit.py
+          python -m compileall -q tests
+
+  windows-modern:
+    name: Windows 10/11 x64
+    needs: source-audit
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          modules: 'qtpdf'
+          cache: true
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Deploy Qt runtime
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item build/OrbisPDF.exe dist/
+          windeployqt --release --qmldir ui --no-translations dist/OrbisPDF.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OrbisPDF-Windows10-11-x64
+          path: dist/
+          if-no-files-found: error
+
+  android-play:
+    name: Android APK/AAB (ARM64 + ARMv7)
+    needs: source-audit
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK and NDK
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platform-tools" "platforms;android-${ANDROID_API}" "build-tools;36.0.0" "ndk;${ANDROID_NDK}"
+      - name: Install Qt Android ARM64
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: linux
+          target: android
+          arch: android_arm64_v8a
+          modules: 'qtpdf'
+          dir: ${{ runner.temp }}/Qt
+          cache: true
+      - name: Install Qt Android ARMv7
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: linux
+          target: android
+          arch: android_armv7
+          modules: 'qtpdf'
+          dir: ${{ runner.temp }}/Qt
+          cache: true
+      - name: Configure Android multi-ABI
+        shell: bash
+        run: |
+          "$RUNNER_TEMP/Qt/${QT_VERSION}/android_arm64_v8a/bin/qt-cmake" \
+            -S . -B build-android -GNinja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DANDROID_PLATFORM=android-${ANDROID_MIN_API} \
+            -DANDROID_SDK_ROOT="$ANDROID_SDK_ROOT" \
+            -DANDROID_NDK_ROOT="$ANDROID_SDK_ROOT/ndk/${ANDROID_NDK}" \
+            -DQT_ANDROID_BUILD_ALL_ABIS=TRUE
+      - name: Build APK
+        run: cmake --build build-android --target apk --parallel
+      - name: Build AAB
+        run: cmake --build build-android --target aab --parallel
+      - name: Collect Android artifacts
+        shell: bash
+        run: |
+          mkdir -p dist-android
+          find build-android -type f \( -name '*.apk' -o -name '*.aab' \) -exec cp -v {} dist-android/ \;
+          test -n "$(find dist-android -type f -name '*.apk' -print -quit)"
+          test -n "$(find dist-android -type f -name '*.aab' -print -quit)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OrbisPDF-Android-unsigned
+          path: dist-android/
+          if-no-files-found: error

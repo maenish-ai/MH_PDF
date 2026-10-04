@@ -1,0 +1,28 @@
+# Build output
+/build*/
+/cmake-build-*/
+/dist*/
+CMakeCache.txt
+CMakeFiles/
+*.user
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Signing and secrets
+*.jks
+*.keystore
+*.p12
+*.pem
+*.key
+.env
+.env.*
+
+# Runtime / tests
+*.log
+__pycache__/
+*.pyc
+.orbis-backup

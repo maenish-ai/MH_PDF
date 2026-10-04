@@ -1,0 +1,17 @@
+Windows Registry Editor Version 5.00
+
+; Optional per-user PDF association registration for Orbis PDF.
+; Adjust the executable path if installed elsewhere. Windows may still ask the
+; user to choose the default PDF application, by design.
+
+[HKEY_CURRENT_USER\Software\Classes\OrbisPDF.Document]
+@="Orbis PDF Document"
+
+[HKEY_CURRENT_USER\Software\Classes\OrbisPDF.Document\DefaultIcon]
+@="\"C:\\Program Files\\Orbis PDF\\OrbisPDF.exe\",0"
+
+[HKEY_CURRENT_USER\Software\Classes\OrbisPDF.Document\shell\open\command]
+@="\"C:\\Program Files\\Orbis PDF\\OrbisPDF.exe\" \"%1\""
+
+[HKEY_CURRENT_USER\Software\Classes\.pdf\OpenWithProgids]
+"OrbisPDF.Document"=hex(0):

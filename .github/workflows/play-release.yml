@@ -1,0 +1,96 @@
+name: Orbis PDF Play Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  QT_VERSION: '6.11.2'
+  ANDROID_NDK: '27.2.12479018'
+
+jobs:
+  signed-play-bundle:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Release gates
+        run: python scripts/preflight.py
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK/NDK
+        run: sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;${ANDROID_NDK}"
+      - name: Install Qt Android ARM64
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: linux
+          target: android
+          arch: android_arm64_v8a
+          modules: 'qtpdf'
+          dir: ${{ runner.temp }}/Qt
+          cache: true
+      - name: Install Qt Android ARMv7
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: linux
+          target: android
+          arch: android_armv7
+          modules: 'qtpdf'
+          dir: ${{ runner.temp }}/Qt
+          cache: true
+      - name: Validate signing secrets
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          STORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          test -n "$KEYSTORE_B64"
+          test -n "$KEY_ALIAS"
+          test -n "$STORE_PASS"
+          test -n "$KEY_PASS"
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/orbis-upload.jks"
+      - name: Configure signed Android release
+        env:
+          QT_ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/orbis-upload.jks
+          QT_ANDROID_KEYSTORE_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          QT_ANDROID_KEYSTORE_STORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          QT_ANDROID_KEYSTORE_KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          "$RUNNER_TEMP/Qt/${QT_VERSION}/android_arm64_v8a/bin/qt-cmake" \
+            -S . -B build-play -GNinja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DANDROID_PLATFORM=android-28 \
+            -DANDROID_SDK_ROOT="$ANDROID_SDK_ROOT" \
+            -DANDROID_NDK_ROOT="$ANDROID_SDK_ROOT/ndk/${ANDROID_NDK}" \
+            -DQT_ANDROID_BUILD_ALL_ABIS=TRUE \
+            -DQT_ANDROID_SIGN_AAB=ON \
+            -DQT_ANDROID_SIGN_APK=ON
+      - name: Build signed AAB and APK
+        env:
+          QT_ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/orbis-upload.jks
+          QT_ANDROID_KEYSTORE_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          QT_ANDROID_KEYSTORE_STORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          QT_ANDROID_KEYSTORE_KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          cmake --build build-play --target aab --parallel
+          cmake --build build-play --target apk --parallel
+      - name: Collect signed artifacts
+        run: |
+          mkdir -p dist-play
+          find build-play -type f \( -name '*.aab' -o -name '*.apk' \) -exec cp -v {} dist-play/ \;
+          test -n "$(find dist-play -type f -name '*.aab' -print -quit)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OrbisPDF-Play-signed
+          path: dist-play/
+          if-no-files-found: error

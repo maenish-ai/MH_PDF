@@ -1,0 +1,31 @@
+from pathlib import Path
+import re,sys
+root=Path(__file__).resolve().parents[1]
+required=['.github/workflows/ci.yml','android/AndroidManifest.xml','android/README.md','docs/GITHUB_RELEASE.md','CMakeLists.txt','.gitignore']
+checks={f'file:{x}':(root/x).exists() for x in required}
+cm=(root/'CMakeLists.txt').read_text(encoding='utf-8')
+wf=(root/'.github/workflows/ci.yml').read_text(encoding='utf-8')
+manifest=(root/'android/AndroidManifest.xml').read_text(encoding='utf-8')
+ard=(root/'android/README.md').read_text(encoding='utf-8')
+checks.update({
+ 'v6 semantic version':'project(OrbisPDF VERSION 6.0.0' in cm,
+ 'stable package id':'org.orbispdf.app' in cm and 'org.orbispdf.app' in ard,
+ 'version code fixed':'QT_ANDROID_VERSION_CODE 60000' in cm,
+ 'api36 target':'QT_ANDROID_TARGET_SDK_VERSION 36' in cm and "ANDROID_API: '36'" in wf,
+ 'min api28':'QT_ANDROID_MIN_SDK_VERSION 28' in cm and "ANDROID_MIN_API: '28'" in wf,
+ 'Qt pinned':'QT_VERSION: \'6.11.2\'' in wf,
+ 'NDK pinned':"ANDROID_NDK: '27.2.12479018'" in wf,
+ 'Windows build':'windows-2022' in wf and 'windeployqt' in wf,
+ 'Android APK/AAB':'--target apk' in wf and '--target aab' in wf,
+ 'audit before builds':wf.count('needs: source-audit') >= 2,
+ 'QtPdf module requested':"modules: 'qtpdf'" in wf,
+ 'Android manifest Qt lib metadata':'android.app.lib_name' in manifest,
+ 'Android insertion markers':'%%INSERT_PERMISSIONS' in manifest and '%%INSERT_FEATURES' in manifest,
+ 'PDF open intent':'android.intent.action.VIEW' in manifest and 'application/pdf' in manifest,
+ 'no custom gradle override':not (root/'android/build.gradle').exists(),
+ 'signing secrets excluded':'*.jks' in (root/'.gitignore').read_text(encoding='utf-8'),
+ 'updates documented':'same package ID' in ard and 'same signing key' in ard,
+ 'legacy honesty':'older than API 28' in ard,
+})
+for n,v in checks.items(): print(('PASS' if v else 'FAIL'),n)
+sys.exit(0 if all(checks.values()) else 1)
