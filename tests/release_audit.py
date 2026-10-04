@@ -22,6 +22,7 @@ checks.update({
  'Android setup avoids obsolete SDK tools package':'packages: platform-tools' in wf and 'packages: platform-tools' in play,
  'Android cross-compile host Qt path':'-DQT_HOST_PATH="$RUNNER_TEMP/Qt/${QT_VERSION}/gcc_64"' in wf and '-DQT_HOST_PATH="$RUNNER_TEMP/Qt/${QT_VERSION}/gcc_64"' in play,
  'Android host Qt validated':'gcc_64/lib/cmake/Qt6/Qt6Config.cmake' in wf and 'gcc_64/lib/cmake/Qt6/Qt6Config.cmake' in play,
+ 'Android module install has library destination':'if(ANDROID)' in cm and 'LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"' in cm and 'include(GNUInstallDirs)' in cm,
  'Play workflow uses Java 21 action v5':'actions/setup-java@v5' in play and "java-version: '21'" in play,
  'audit before builds':wf.count('needs: source-audit') >= 2,
  'QtPdf extension requested':'-m qtpdf' in wf and 'aqtinstall.git' in wf,

@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.21)
 project(OrbisPDF VERSION 6.0.0 LANGUAGES CXX)
 
+include(GNUInstallDirs)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
@@ -55,4 +57,17 @@ if(ANDROID)
     set_property(TARGET OrbisPDF PROPERTY QT_ANDROID_VERSION_NAME "6.0.0")
 endif()
 
-install(TARGETS OrbisPDF BUNDLE DESTINATION . RUNTIME DESTINATION bin)
+if(ANDROID)
+    # qt_add_executable() produces a MODULE library on Android.
+    # CMake requires an explicit LIBRARY destination for module targets, even
+    # though APK/AAB packaging itself is performed by Qt's androiddeployqt flow.
+    install(TARGETS OrbisPDF
+        LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    )
+else()
+    install(TARGETS OrbisPDF
+        BUNDLE DESTINATION .
+        RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+        LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    )
+endif()

@@ -22,3 +22,11 @@ The third hosted build confirmed that the Windows generator/toolchain is now cor
 - Android: Qt cross-compilation now passes `QT_HOST_PATH` to the host desktop Qt installed by `aqt --autodesktop`, and validates that host Qt before CMake configure.
 
 These fixes are also guarded by the source/release audits. The next GitHub Actions run remains the authoritative native compile/package check.
+
+
+## GitHub Actions Run #4 follow-up
+
+- Windows 10/11 x64: configure, compile, Qt deployment, and artifact upload all passed on GitHub-hosted Windows 2022.
+- Android reached Qt/CMake configuration successfully with the host Qt path resolved.
+- The remaining Android configure failure was CMake rejecting the desktop-only install rule because the Android executable target is a module library.
+- v6.0.4 changes the install rule to provide an explicit Android `LIBRARY DESTINATION`, while retaining normal desktop runtime/bundle destinations.
