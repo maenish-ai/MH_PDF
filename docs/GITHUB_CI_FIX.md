@@ -19,3 +19,5 @@ Run #3 progressed past Qt installation, QML parsing, Windows generator selection
 2. Android target Qt requires a host Qt when cross-compiling. Both CI and Play workflows now pass `-DQT_HOST_PATH="$RUNNER_TEMP/Qt/${QT_VERSION}/gcc_64"` and validate the host installation created by `--autodesktop`.
 
 Do not remove these guards unless the Qt backend/API or Android toolchain architecture changes.
+
+- GitHub Actions runtime hygiene: checkout v7.0.1, setup-python v7.0.0, setup-android v4.0.4, and upload-artifact v7.0.1 all use Node.js 24, eliminating the Node.js 20 deprecation annotations.

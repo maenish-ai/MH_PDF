@@ -30,3 +30,5 @@ These fixes are also guarded by the source/release audits. The next GitHub Actio
 - Android reached Qt/CMake configuration successfully with the host Qt path resolved.
 - The remaining Android configure failure was CMake rejecting the desktop-only install rule because the Android executable target is a module library.
 - v6.0.4 changes the install rule to provide an explicit Android `LIBRARY DESTINATION`, while retaining normal desktop runtime/bundle destinations.
+
+- GitHub Actions runtime hygiene: checkout v7.0.1, setup-python v7.0.0, setup-android v4.0.4, and upload-artifact v7.0.1 all use Node.js 24, eliminating the Node.js 20 deprecation annotations.

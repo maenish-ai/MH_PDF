@@ -14,8 +14,8 @@ jobs:
   signed-play-bundle:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: '3.12'
       - name: Release gates
@@ -24,7 +24,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4.0.4
         with:
           packages: platform-tools
       - name: Install Android SDK/NDK
@@ -89,7 +89,7 @@ jobs:
           mkdir -p dist-play
           find build-play -type f \( -name '*.aab' -o -name '*.apk' \) -exec cp -v {} dist-play/ \;
           test -n "$(find dist-play -type f -name '*.aab' -print -quit)"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.1
         with:
           name: OrbisPDF-Play-signed
           path: dist-play/

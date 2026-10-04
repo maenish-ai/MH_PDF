@@ -22,3 +22,5 @@
 - [ ] Configure Play App Signing/upload-key secrets only when the Play Console project exists.
 
 A hosted compile cannot be honestly certified by a source-only environment without Qt; GitHub Actions is the final compilation and packaging gate.
+
+- GitHub Actions runtime hygiene: checkout v7.0.1, setup-python v7.0.0, setup-android v4.0.4, and upload-artifact v7.0.1 all use Node.js 24, eliminating the Node.js 20 deprecation annotations.
