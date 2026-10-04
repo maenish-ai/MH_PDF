@@ -18,7 +18,7 @@ checks.update({
  'Windows build':'windows-2022' in wf and 'windeployqt' in wf,
  'Android APK/AAB':'--target apk' in wf and '--target aab' in wf,
  'audit before builds':wf.count('needs: source-audit') >= 2,
- 'QtPdf module requested':"modules: 'qtpdf'" in wf,
+ 'QtPdf extension requested':'-m qtpdf' in wf and 'aqtinstall.git' in wf,
  'Android manifest Qt lib metadata':'android.app.lib_name' in manifest,
  'Android insertion markers':'%%INSERT_PERMISSIONS' in manifest and '%%INSERT_FEATURES' in manifest,
  'PDF open intent':'android.intent.action.VIEW' in manifest and 'application/pdf' in manifest,
