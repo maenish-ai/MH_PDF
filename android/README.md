@@ -1,7 +1,7 @@
 # Android release contract
 
 - Package ID: `org.orbispdf.app`. **Do not change it after the first Play release.**
-- Version: `6.0.8`, versionCode `60008`.
+- Version: `6.0.9`, versionCode `60009`.
 - Modern runtime target: Android 9 / API 28 and newer.
 - Google Play compile/target API: 36.
 - CI toolchain: Qt 6.11.2, JDK 21, Android NDK 27.2.12479018.

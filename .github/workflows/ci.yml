@@ -79,18 +79,35 @@ jobs:
             --no-translations `
             "dist\MaenPDF.exe"
           if ($LASTEXITCODE -ne 0) { throw "windeployqt failed with exit code $LASTEXITCODE" }
-          if (!(Test-Path "dist\platforms\qwindows.dll")) { throw "Qt Windows platform plugin is missing" }
-          if (!(Test-Path "dist\Qt6Pdf.dll")) { throw "Qt PDF runtime is missing" }
+          foreach ($required in @(
+            "dist\platforms\qwindows.dll",
+            "dist\Qt6Core.dll",
+            "dist\Qt6Gui.dll",
+            "dist\Qt6Qml.dll",
+            "dist\Qt6Quick.dll",
+            "dist\Qt6Pdf.dll",
+            "dist\msvcp140.dll",
+            "dist\vcruntime140.dll"
+          )) {
+            if (!(Test-Path $required)) { throw "Required Windows runtime is missing: $required" }
+          }
+          if (-not (Get-ChildItem dist -Filter "vcruntime140*.dll" -ErrorAction SilentlyContinue)) {
+            throw "MSVC runtime deployment is incomplete"
+          }
 
-      - name: Smoke test portable MaenPDF executable
+      - name: Smoke test portable MaenPDF with native Windows platform
         shell: pwsh
         run: |
-          $env:QT_QPA_PLATFORM = "offscreen"
-          $env:QT_QUICK_BACKEND = "software"
+          # Do NOT set QT_QPA_PLATFORM=offscreen here. This test must exercise
+          # qwindows.dll and the same startup path used on a real Windows PC.
+          Remove-Item Env:QT_QPA_PLATFORM -ErrorAction SilentlyContinue
+          Remove-Item Env:QT_QUICK_BACKEND -ErrorAction SilentlyContinue
           $proc = Start-Process -FilePath "$PWD\dist\MaenPDF.exe" -WorkingDirectory "$PWD\dist" -PassThru
-          Start-Sleep -Seconds 6
+          Start-Sleep -Seconds 8
           if ($proc.HasExited) {
-            throw "MaenPDF.exe exited during startup smoke test with code $($proc.ExitCode)"
+            $log = Join-Path $env:LOCALAPPDATA "MaenPDF\MaenPDF\logs\maenpdf.log"
+            if (Test-Path $log) { Get-Content $log -Tail 100 | Write-Host }
+            throw "MaenPDF.exe exited during native Windows startup smoke test with code $($proc.ExitCode)"
           }
           Stop-Process -Id $proc.Id -Force
 
@@ -108,21 +125,49 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
           if (!(Test-Path "installer-output\MaenPDF-Setup.exe")) { throw "MaenPDF-Setup.exe was not produced" }
 
-      - name: Smoke test installed MaenPDF
+      - name: Smoke test installed MaenPDF from desktop shortcut
         shell: pwsh
         run: |
           $setup = (Resolve-Path "installer-output\MaenPDF-Setup.exe").Path
           $installDir = "$env:RUNNER_TEMP\MaenPDF-Smoke"
-          $args = @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$installDir")
+          $args = @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$installDir",'/TASKS=desktopicon')
           $installer = Start-Process -FilePath $setup -ArgumentList $args -Wait -PassThru
           if ($installer.ExitCode -ne 0) { throw "MaenPDF installer smoke test failed with code $($installer.ExitCode)" }
+
           $installedExe = Join-Path $installDir 'MaenPDF.exe'
           if (!(Test-Path $installedExe)) { throw "Installed MaenPDF.exe is missing" }
-          $env:QT_QPA_PLATFORM = "offscreen"
-          $env:QT_QUICK_BACKEND = "software"
-          $proc = Start-Process -FilePath $installedExe -WorkingDirectory $installDir -PassThru
-          Start-Sleep -Seconds 6
-          if ($proc.HasExited) { throw "Installed MaenPDF exited during smoke test with code $($proc.ExitCode)" }
+          if (!(Test-Path (Join-Path $installDir 'platforms\qwindows.dll'))) { throw "Installed qwindows.dll is missing" }
+          if (!(Test-Path (Join-Path $installDir 'Qt6Pdf.dll'))) { throw "Installed Qt6Pdf.dll is missing" }
+          if (!(Test-Path (Join-Path $installDir 'msvcp140.dll'))) { throw "Installed MSVC runtime is missing" }
+
+          $desktopCandidates = @(
+            (Join-Path ([Environment]::GetFolderPath('Desktop')) 'MaenPDF.lnk'),
+            (Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'MaenPDF.lnk')
+          )
+          $shortcut = $desktopCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $shortcut) {
+            throw "MaenPDF desktop shortcut was not created"
+          }
+
+          $wsh = New-Object -ComObject WScript.Shell
+          $link = $wsh.CreateShortcut($shortcut)
+          if ([IO.Path]::GetFullPath($link.TargetPath) -ne [IO.Path]::GetFullPath($installedExe)) {
+            throw "Desktop shortcut target is wrong: $($link.TargetPath)"
+          }
+          if ([IO.Path]::GetFullPath($link.WorkingDirectory) -ne [IO.Path]::GetFullPath($installDir)) {
+            throw "Desktop shortcut working directory is wrong: $($link.WorkingDirectory)"
+          }
+
+          Remove-Item Env:QT_QPA_PLATFORM -ErrorAction SilentlyContinue
+          Remove-Item Env:QT_QUICK_BACKEND -ErrorAction SilentlyContinue
+          Start-Process -FilePath $shortcut
+          Start-Sleep -Seconds 8
+          $proc = Get-Process -Name MaenPDF -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $proc) {
+            $log = Join-Path $env:LOCALAPPDATA "MaenPDF\MaenPDF\logs\maenpdf.log"
+            if (Test-Path $log) { Get-Content $log -Tail 100 | Write-Host }
+            throw "MaenPDF did not remain running when launched from the desktop shortcut"
+          }
           Stop-Process -Id $proc.Id -Force
 
       - uses: actions/upload-artifact@v7.0.1

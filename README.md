@@ -55,6 +55,6 @@ GitHub CI publishes `MaenPDF-Installable-Test.apk` inside the `MaenPDF-Android-I
 
 ## Windows installer
 
-The Windows CI job now produces `MaenPDF-Windows-Setup`, containing a single `MaenPDF-Setup.exe`. The workflow first deploys the full Qt runtime with `windeployqt`, verifies the required Windows platform and Qt PDF DLLs, launches the portable executable in an offscreen startup smoke test, builds the Inno Setup installer, installs it silently into a clean test directory, and launches the installed executable again. The setup creates Start Menu and optional Desktop shortcuts named **MaenPDF** and registers MaenPDF as an available PDF opener.
+The Windows CI job now produces `MaenPDF-Windows-Setup`, containing a single `MaenPDF-Setup.exe`. The workflow first deploys the full Qt runtime with `windeployqt`, verifies the required Windows platform and Qt PDF DLLs, launches the portable executable through the native Windows platform, builds the Inno Setup installer, installs it silently into a clean test directory, validates the generated desktop shortcut, and launches the application from that shortcut. MaenPDF defaults to Qt Quick software rendering on Windows to avoid silent startup failures caused by incompatible GPU drivers. The setup creates Start Menu and optional Desktop shortcuts named **MaenPDF** and registers MaenPDF as an available PDF opener.
 
 For normal use, download the **MaenPDF-Windows-Setup** artifact and run `MaenPDF-Setup.exe`; do not copy only the portable EXE away from its Qt runtime folder.
