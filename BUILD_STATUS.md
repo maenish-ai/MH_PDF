@@ -51,3 +51,9 @@ GitHub Actions Run #9 confirmed that source audit, Android APK/AAB, Windows conf
 
 ## Windows QML startup correction — v6.0.11
 GitHub Actions Run #10 proved that source audit, Android APK/AAB, Windows compilation, Qt deployment, and VC143 runtime bundling all succeeded. The native Windows startup smoke test then exposed the real UI failure: `ui/Main.qml` assigned `letterSpacing` directly on a `Label`, which Qt 6.11 rejects at runtime. v6.0.11 changes this to the valid grouped property `font.letterSpacing`, adds a source audit preventing direct `letterSpacing:` assignments, and keeps the native portable/installed-shortcut startup gates enabled.
+
+## v7.0.1 Windows runtime stabilization
+- GitHub Run #12 proved Source Audit and Android green; only Windows native startup failed.
+- Root cause: `Main.qml` used `topPadding` on `ColumnLayout`, which is not a valid property.
+- A second latent `bottomPadding` misuse on a thumbnail `Label` was removed proactively.
+- CI now includes a real PDF-open smoke test so lazy/delegate QML is instantiated and checked for runtime property errors.

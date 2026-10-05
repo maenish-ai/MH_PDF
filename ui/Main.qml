@@ -970,7 +970,8 @@ ApplicationWindow {
                 ColumnLayout {
                     width: Math.min(980, parent.width - 40)
                     anchors.horizontalCenter: parent.horizontalCenter
-                    topPadding: 42
+                    anchors.top: parent.top
+                    anchors.topMargin: 42
                     spacing: 18
                     Label { text: tx("home.title"); font.pixelSize: 32; font.bold: true; color: textColor; Layout.alignment: Qt.AlignHCenter }
                     Label { text: tx("home.subtitle"); font.pixelSize: 15; color: mutedColor; wrapMode: Text.WordWrap; horizontalAlignment: Text.AlignHCenter; Layout.fillWidth: true }
@@ -1068,7 +1069,7 @@ ApplicationWindow {
                                 border.color: index === pdfDocument.currentPage ? "#91aff0" : "transparent"
                             }
                             Image { source: pageImage; anchors.horizontalCenter: parent.horizontalCenter; y: 12; width: 104; height: 147; fillMode: Image.PreserveAspectFit; cache: false; asynchronous: false }
-                            Label { text: i18n.number(index + 1); color: textColor; anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; bottomPadding: 6 }
+                            Label { text: i18n.number(index + 1); color: textColor; anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; anchors.bottomMargin: 6 }
                             TapHandler { onTapped: pdfDocument.currentPage = index }
                         }
                     }

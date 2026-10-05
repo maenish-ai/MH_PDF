@@ -24,3 +24,9 @@
 A hosted compile cannot be honestly certified by a source-only environment without Qt; GitHub Actions is the final compilation and packaging gate.
 
 - GitHub Actions runtime hygiene: checkout v7.0.1, setup-python v7.0.0, setup-android v4.0.4, and upload-artifact v7.0.1 all use Node.js 24, eliminating the Node.js 20 deprecation annotations.
+
+## v7.0.1 Windows runtime stabilization
+- GitHub Run #12 proved Source Audit and Android green; only Windows native startup failed.
+- Root cause: `Main.qml` used `topPadding` on `ColumnLayout`, which is not a valid property.
+- A second latent `bottomPadding` misuse on a thumbnail `Label` was removed proactively.
+- CI now includes a real PDF-open smoke test so lazy/delegate QML is instantiated and checked for runtime property errors.

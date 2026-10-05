@@ -11,11 +11,11 @@ ard=(root/'android/README.md').read_text(encoding='utf-8')
 iss=(root/'installer/MaenPDF.iss').read_text(encoding='utf-8')
 pre=(root/'scripts/preflight.py').read_text(encoding='utf-8')
 checks.update({
- 'v7 semantic version':'project(MaenPDF VERSION 7.0.0' in cm,
+ 'v7 semantic version':'project(MaenPDF VERSION 7.0.1' in cm,
  'v7 QML module':'VERSION 7.0' in cm,
  'stable package id':'org.orbispdf.app' in cm and 'org.orbispdf.app' in ard,
- 'version code 70000':'QT_ANDROID_VERSION_CODE 70000' in cm,
- 'version name 7':'QT_ANDROID_VERSION_NAME "7.0.0"' in cm,
+ 'version code 70001':'QT_ANDROID_VERSION_CODE 70001' in cm,
+ 'version name 7':'QT_ANDROID_VERSION_NAME "7.0.1"' in cm,
  'api36 target':'QT_ANDROID_TARGET_SDK_VERSION 36' in cm and "ANDROID_API: '36'" in wf,
  'min api28':'QT_ANDROID_MIN_SDK_VERSION 28' in cm and "ANDROID_MIN_API: '28'" in wf,
  'Qt pinned':'QT_VERSION: \'6.11.2\'' in wf,
@@ -23,7 +23,8 @@ checks.update({
  'Windows build':'windows-2022' in wf and 'scripts/deploy_windows.ps1' in wf,
  'Windows compiler matches Qt MSVC kit':'Visual Studio 17 2022' in wf and '-A x64' in wf and 'build/Release/MaenPDF.exe' in wf,
  'Windows native portable startup smoke test':'Smoke test portable MaenPDF with native Windows platform' in wf and 'Remove-Item Env:QT_QPA_PLATFORM' in wf,
- 'Windows installer v7':'#define MyAppVersion "7.0.0"' in iss and 'VersionInfoVersion=7.0.0.0' in iss,
+ 'Windows real PDF open smoke test':'Smoke test portable MaenPDF opening PDF fixture' in wf and 'create_smoke_pdf.py' in wf and 'Cannot assign to non-existent property' in wf,
+ 'Windows installer v7':'#define MyAppVersion "7.0.1"' in iss and 'VersionInfoVersion=7.0.1.0' in iss,
  'Windows installer built':'MaenPDF-Setup.exe' in wf and 'installer\\MaenPDF.iss' in wf,
  'Windows installed shortcut smoke test':'Smoke test installed MaenPDF from desktop shortcut' in wf and 'MaenPDF.lnk' in wf and 'WScript.Shell' in wf,
  'Windows icon resource':'platform/windows/MaenPDF.rc.in' in cm and (root/'assets/maenpdf.ico').exists(),

@@ -1,4 +1,10 @@
-# MaenPDF 7.0.0 — Release Notes
+# MaenPDF 7.0.1 — Release Notes
+
+## 7.0.1 stabilization
+- Fixed Windows QML startup failure caused by unsupported direct `topPadding` on `ColumnLayout`.
+- Fixed latent thumbnail delegate failure caused by unsupported direct `bottomPadding` on `Label`.
+- Opening a PDF from the command line or Windows file association now switches directly from Home to the document workspace.
+- Windows CI now opens a generated one-page PDF fixture and rejects QML runtime property errors, not only Home-screen startup failures.
 
 MaenPDF 7 is the first modular local-first architecture release.
 

@@ -104,6 +104,47 @@ jobs:
           }
           Stop-Process -Id $proc.Id -Force
 
+      - name: Smoke test portable MaenPDF opening PDF fixture
+        shell: pwsh
+        run: |
+          # Exercise the document workspace and lazy delegates, not only Home.
+          python scripts/create_smoke_pdf.py "$PWD\windows-smoke.pdf"
+          Remove-Item Env:QT_QPA_PLATFORM -ErrorAction SilentlyContinue
+          Remove-Item Env:QT_QUICK_BACKEND -ErrorAction SilentlyContinue
+          $log = Join-Path $env:LOCALAPPDATA "MaenPDF\MaenPDF\logs\maenpdf.log"
+          Remove-Item $log -Force -ErrorAction SilentlyContinue
+          $fixture = (Resolve-Path "$PWD\windows-smoke.pdf").Path
+          $proc = Start-Process -FilePath "$PWD\dist\MaenPDF.exe" -ArgumentList @($fixture) -WorkingDirectory "$PWD\dist" -PassThru
+          Start-Sleep -Seconds 8
+          if ($proc.HasExited) {
+            if (Test-Path $log) { Get-Content $log -Tail 200 | Write-Host }
+            throw "MaenPDF.exe exited while opening the PDF fixture with code $($proc.ExitCode)"
+          }
+          if (!(Test-Path $log)) {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            throw "MaenPDF PDF-open smoke test did not create its startup log"
+          }
+          $logText = Get-Content $log -Raw
+          $logText | Write-Host
+          if ($logText -notmatch "Main window created successfully") {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            throw "MaenPDF main window was not confirmed while opening a PDF"
+          }
+          $fatalPatterns = @(
+            'Cannot assign to non-existent property',
+            'QQmlApplicationEngine failed to load component',
+            '\[FATAL\]',
+            'ReferenceError:',
+            'TypeError:'
+          )
+          foreach ($pattern in $fatalPatterns) {
+            if ($logText -match $pattern) {
+              Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+              throw "QML/runtime error detected while opening PDF: $pattern"
+            }
+          }
+          Stop-Process -Id $proc.Id -Force
+
       - name: Build Windows installer
         shell: pwsh
         run: |
