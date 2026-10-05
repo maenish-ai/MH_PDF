@@ -4,6 +4,9 @@
 #include <QDebug>
 #include <QGuiApplication>
 #include <QIcon>
+#include <QQuickStyle>
+#include <QQuickWindow>
+#include <QSGRendererInterface>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QtGlobal>
@@ -48,28 +51,36 @@ void showStartupFailure(const QString &details)
 int main(int argc, char *argv[])
 {
 #ifdef Q_OS_WIN
-    // Qt Quick's default Windows graphics backend can fail silently on systems
-    // with problematic/old GPU drivers. MaenPDF is a document editor and does
-    // not need GPU-only effects, so use Qt's proven software scene-graph backend
-    // by default. Advanced users may explicitly override QT_QUICK_BACKEND.
+    // Force the most compatible Qt Quick path before any window is created.
+    // This avoids silent startup failures caused by broken GPU/D3D drivers.
     if (qEnvironmentVariableIsEmpty("QT_QUICK_BACKEND"))
         qputenv("QT_QUICK_BACKEND", QByteArrayLiteral("software"));
 #endif
 
     QGuiApplication app(argc, argv);
-    AppLogger::install();
 
+#ifdef Q_OS_WIN
+    // These calls are made after QGuiApplication exists but before the first
+    // QQuickWindow/QML control is created. Pin both rendering and controls to
+    // the compatibility-oriented paths used by MaenPDF on Windows.
+    QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
+    QQuickStyle::setStyle(QStringLiteral("Basic"));
+#endif
+
+    // Set application identity before the logger resolves AppLocalDataLocation
+    // so every startup message is written to one deterministic path.
     QGuiApplication::setOrganizationName(QStringLiteral("MaenPDF"));
     QGuiApplication::setOrganizationDomain(QStringLiteral("maenpdf.local"));
     QGuiApplication::setApplicationName(QStringLiteral("MaenPDF"));
-    QGuiApplication::setApplicationVersion(QStringLiteral("6.0.9"));
+    QGuiApplication::setApplicationVersion(QStringLiteral("6.0.10"));
+    AppLogger::install();
 
     // Make startup independent of how the process was launched (desktop
     // shortcut, Start menu, Explorer, terminal, file association, etc.).
     QDir::setCurrent(QCoreApplication::applicationDirPath());
 
     AppLogger::write(QStringLiteral("INFO"),
-                     QStringLiteral("MaenPDF 6.0.9 startup; Qt %1; appDir=%2; cwd=%3; QT_QUICK_BACKEND=%4")
+                     QStringLiteral("MaenPDF 6.0.10 startup; Qt %1; appDir=%2; cwd=%3; QT_QUICK_BACKEND=%4")
                          .arg(QString::fromLatin1(qVersion()),
                               QCoreApplication::applicationDirPath(),
                               QDir::currentPath(),

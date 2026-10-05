@@ -28,3 +28,7 @@ GitHub Actions run #7 proved that the Android application itself compiles and th
 
 ## v6.0.9 Windows real-device startup correction
 The earlier Windows smoke tests were too permissive because they forced Qt's offscreen platform and software backend from the workflow. That could hide failures that occur only when a user launches the installed desktop shortcut. v6.0.9 makes software Qt Quick rendering the Windows application default, keeps `qwindows.dll` as the real platform plugin, validates the MSVC runtime DLLs, and launches the installed application from the generated `.lnk` during CI. Startup failures after QML loading now produce both a native Windows error dialog and a persistent AppData log instead of silently returning.
+
+
+## v6.0.10 Windows runtime stabilization
+Run #9 proved that source compilation and Android packaging were healthy, but the Windows job stopped during deployment because `windeployqt --compiler-runtime` could not locate Visual Studio when `VCINSTALLDIR` was absent from the hosted PowerShell environment. v6.0.10 removes that fragile assumption: `scripts/deploy_windows.ps1` deploys Qt first, locates Visual Studio with `vswhere`, copies the complete x64 `Microsoft.VC143.CRT` side-by-side, and falls back to the runner's System32 CRT family only if the Visual Studio redist layout changes. CI now confirms the QML main window through the persistent startup log for both portable and installed-shortcut launches and always uploads Windows diagnostics.

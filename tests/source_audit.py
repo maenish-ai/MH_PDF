@@ -25,7 +25,9 @@ checks={
  'undo core operations':all(x in cpp for x in ['Add blank page','Paste page','Combine PDF','Watermark','Page numbers']),
  'QML child objects do not use semicolon separators':re.search(r'\}\s*;\s*[A-Z][A-Za-z0-9_]*\s*\{', qml) is None,
  'QtPdf logical reads are const-safe with Qt 6.11':'mutable QPdfDocument m_doc;' in qtbackend,
- 'Windows startup defaults to software Qt Quick backend':('QT_QUICK_BACKEND' in (root/'app/main.cpp').read_text(encoding='utf-8') and 'QByteArrayLiteral("software")' in (root/'app/main.cpp').read_text(encoding='utf-8')),
+ 'Windows startup defaults to software Qt Quick backend':('QT_QUICK_BACKEND' in (root/'app/main.cpp').read_text(encoding='utf-8') and 'QByteArrayLiteral("software")' in (root/'app/main.cpp').read_text(encoding='utf-8') and 'QSGRendererInterface::Software' in (root/'app/main.cpp').read_text(encoding='utf-8')),
+ 'Windows controls style pinned to Basic':'QQuickStyle::setStyle(QStringLiteral("Basic"))' in (root/'app/main.cpp').read_text(encoding='utf-8'),
+ 'application identity precedes logger install':(root/'app/main.cpp').read_text(encoding='utf-8').index('QGuiApplication::setApplicationName') < (root/'app/main.cpp').read_text(encoding='utf-8').index('AppLogger::install()'),
  'Windows startup failure is visible':('MaenPDF Startup Error' in (root/'app/main.cpp').read_text(encoding='utf-8') and 'MessageBoxW' in (root/'app/main.cpp').read_text(encoding='utf-8')),
  'startup cwd normalized to app dir':'QDir::setCurrent(QCoreApplication::applicationDirPath())' in (root/'app/main.cpp').read_text(encoding='utf-8'),
 }

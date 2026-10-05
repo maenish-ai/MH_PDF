@@ -66,48 +66,38 @@ jobs:
         run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR"
       - name: Build
         run: cmake --build build --config Release --parallel
-      - name: Deploy complete Qt runtime
+      - name: Deploy complete Qt + VC143 runtime
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force dist | Out-Null
-          Copy-Item build/Release/MaenPDF.exe dist/
-          & "$env:QT_ROOT_DIR\bin\windeployqt.exe" `
-            --release `
-            --force `
-            --compiler-runtime `
-            --qmldir "$PWD\ui" `
-            --no-translations `
-            "dist\MaenPDF.exe"
-          if ($LASTEXITCODE -ne 0) { throw "windeployqt failed with exit code $LASTEXITCODE" }
-          foreach ($required in @(
-            "dist\platforms\qwindows.dll",
-            "dist\Qt6Core.dll",
-            "dist\Qt6Gui.dll",
-            "dist\Qt6Qml.dll",
-            "dist\Qt6Quick.dll",
-            "dist\Qt6Pdf.dll",
-            "dist\msvcp140.dll",
-            "dist\vcruntime140.dll"
-          )) {
-            if (!(Test-Path $required)) { throw "Required Windows runtime is missing: $required" }
-          }
-          if (-not (Get-ChildItem dist -Filter "vcruntime140*.dll" -ErrorAction SilentlyContinue)) {
-            throw "MSVC runtime deployment is incomplete"
-          }
+          ./scripts/deploy_windows.ps1 `
+            -QtRootDir "$env:QT_ROOT_DIR" `
+            -BuildExe "build/Release/MaenPDF.exe" `
+            -DistDir "dist"
 
       - name: Smoke test portable MaenPDF with native Windows platform
         shell: pwsh
         run: |
-          # Do NOT set QT_QPA_PLATFORM=offscreen here. This test must exercise
+          # Do NOT set QT_QPA_PLATFORM=offscreen here. This must exercise
           # qwindows.dll and the same startup path used on a real Windows PC.
           Remove-Item Env:QT_QPA_PLATFORM -ErrorAction SilentlyContinue
           Remove-Item Env:QT_QUICK_BACKEND -ErrorAction SilentlyContinue
+          $log = Join-Path $env:LOCALAPPDATA "MaenPDF\MaenPDF\logs\maenpdf.log"
+          Remove-Item $log -Force -ErrorAction SilentlyContinue
           $proc = Start-Process -FilePath "$PWD\dist\MaenPDF.exe" -WorkingDirectory "$PWD\dist" -PassThru
           Start-Sleep -Seconds 8
           if ($proc.HasExited) {
-            $log = Join-Path $env:LOCALAPPDATA "MaenPDF\MaenPDF\logs\maenpdf.log"
-            if (Test-Path $log) { Get-Content $log -Tail 100 | Write-Host }
+            if (Test-Path $log) { Get-Content $log -Tail 150 | Write-Host }
             throw "MaenPDF.exe exited during native Windows startup smoke test with code $($proc.ExitCode)"
+          }
+          if (!(Test-Path $log)) {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            throw "MaenPDF startup log was not created"
+          }
+          $logText = Get-Content $log -Raw
+          $logText | Write-Host
+          if ($logText -notmatch "Main window created successfully") {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            throw "MaenPDF process started but the main QML window was not confirmed"
           }
           Stop-Process -Id $proc.Id -Force
 
@@ -160,15 +150,45 @@ jobs:
 
           Remove-Item Env:QT_QPA_PLATFORM -ErrorAction SilentlyContinue
           Remove-Item Env:QT_QUICK_BACKEND -ErrorAction SilentlyContinue
+          $log = Join-Path $env:LOCALAPPDATA "MaenPDF\MaenPDF\logs\maenpdf.log"
+          Remove-Item $log -Force -ErrorAction SilentlyContinue
           Start-Process -FilePath $shortcut
           Start-Sleep -Seconds 8
           $proc = Get-Process -Name MaenPDF -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $proc) {
-            $log = Join-Path $env:LOCALAPPDATA "MaenPDF\MaenPDF\logs\maenpdf.log"
-            if (Test-Path $log) { Get-Content $log -Tail 100 | Write-Host }
+            if (Test-Path $log) { Get-Content $log -Tail 150 | Write-Host }
             throw "MaenPDF did not remain running when launched from the desktop shortcut"
           }
+          if (!(Test-Path $log)) {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            throw "Installed MaenPDF did not create its startup log"
+          }
+          $logText = Get-Content $log -Raw
+          $logText | Write-Host
+          if ($logText -notmatch "Main window created successfully") {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            throw "Desktop shortcut launched a process but the main QML window was not confirmed"
+          }
           Stop-Process -Id $proc.Id -Force
+
+      - name: Collect Windows diagnostics
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force windows-diagnostics | Out-Null
+          if (Test-Path "dist\windows-runtime-inventory.txt") {
+            Copy-Item "dist\windows-runtime-inventory.txt" windows-diagnostics/ -Force
+          }
+          $log = Join-Path $env:LOCALAPPDATA "MaenPDF\MaenPDF\logs\maenpdf.log"
+          if (Test-Path $log) { Copy-Item $log "windows-diagnostics\maenpdf.log" -Force }
+          if (Test-Path "build\CMakeCache.txt") { Copy-Item "build\CMakeCache.txt" windows-diagnostics/ -Force }
+
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: MaenPDF-Windows-Diagnostics
+          path: windows-diagnostics/
+          if-no-files-found: ignore
 
       - uses: actions/upload-artifact@v7.0.1
         with:
