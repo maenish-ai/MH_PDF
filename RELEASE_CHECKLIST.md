@@ -2,8 +2,8 @@
 
 ## Before pushing to GitHub
 - [x] Package ID fixed: `org.orbispdf.app`
-- [x] versionName `6.0.10`
-- [x] versionCode `60010`
+- [x] versionName `6.0.11`
+- [x] versionCode `60011`
 - [x] English and Arabic catalogs have identical keys
 - [x] English catalog contains no Arabic characters
 - [x] Arabic catalog has no untranslated Latin UI words (file-extension patterns excluded)

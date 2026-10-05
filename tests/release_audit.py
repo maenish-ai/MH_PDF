@@ -9,9 +9,9 @@ play=(root/'.github/workflows/play-release.yml').read_text(encoding='utf-8')
 manifest=(root/'android/AndroidManifest.xml').read_text(encoding='utf-8')
 ard=(root/'android/README.md').read_text(encoding='utf-8')
 checks.update({
- 'v6 semantic version':'project(MaenPDF VERSION 6.0.10' in cm,
+ 'v6 semantic version':'project(MaenPDF VERSION 6.0.11' in cm,
  'stable package id':'org.orbispdf.app' in cm and 'org.orbispdf.app' in ard,
- 'version code fixed':'QT_ANDROID_VERSION_CODE 60010' in cm,
+ 'version code fixed':'QT_ANDROID_VERSION_CODE 60011' in cm,
  'api36 target':'QT_ANDROID_TARGET_SDK_VERSION 36' in cm and "ANDROID_API: '36'" in wf,
  'min api28':'QT_ANDROID_MIN_SDK_VERSION 28' in cm and "ANDROID_MIN_API: '28'" in wf,
  'Qt pinned':'QT_VERSION: \'6.11.2\'' in wf,

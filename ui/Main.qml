@@ -321,7 +321,7 @@ ApplicationWindow {
                 Rectangle { width: 38; height: 38; radius: 11; color: "#2864dc"; Label { anchors.centerIn: parent; text: "◈"; font.pixelSize: 25; font.bold: true; color: "white" } }
                 Column {
                     Label { text: tx("app.brand"); font.bold: true; font.pixelSize: 16; color: "#172033" }
-                    Label { text: tx("app.professional"); font.pixelSize: 9; letterSpacing: 1.5; color: "#667085" }
+                    Label { text: tx("app.professional"); font.pixelSize: 9; font.letterSpacing: 1.5; color: "#667085" }
                 }
                 Rectangle { width: 1; height: 32; color: "#e1e5eb" }
                 ToolButton { text: "＋ " + tx("action.new"); onClicked: pdfDocument.newDocument() }

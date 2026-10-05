@@ -24,6 +24,7 @@ checks={
  'quality gate':(root/'QUALITY.md').exists(),
  'undo core operations':all(x in cpp for x in ['Add blank page','Paste page','Combine PDF','Watermark','Page numbers']),
  'QML child objects do not use semicolon separators':re.search(r'\}\s*;\s*[A-Z][A-Za-z0-9_]*\s*\{', qml) is None,
+ 'QML Label letter spacing uses font group':re.search(r'(?<!font\.)\bletterSpacing\s*:', qml) is None and 'font.letterSpacing:' in qml,
  'QtPdf logical reads are const-safe with Qt 6.11':'mutable QPdfDocument m_doc;' in qtbackend,
  'Windows startup defaults to software Qt Quick backend':('QT_QUICK_BACKEND' in (root/'app/main.cpp').read_text(encoding='utf-8') and 'QByteArrayLiteral("software")' in (root/'app/main.cpp').read_text(encoding='utf-8') and 'QSGRendererInterface::Software' in (root/'app/main.cpp').read_text(encoding='utf-8')),
  'Windows controls style pinned to Basic':'QQuickStyle::setStyle(QStringLiteral("Basic"))' in (root/'app/main.cpp').read_text(encoding='utf-8'),

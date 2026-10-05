@@ -32,3 +32,6 @@ The earlier Windows smoke tests were too permissive because they forced Qt's off
 
 ## v6.0.10 Windows runtime stabilization
 Run #9 proved that source compilation and Android packaging were healthy, but the Windows job stopped during deployment because `windeployqt --compiler-runtime` could not locate Visual Studio when `VCINSTALLDIR` was absent from the hosted PowerShell environment. v6.0.10 removes that fragile assumption: `scripts/deploy_windows.ps1` deploys Qt first, locates Visual Studio with `vswhere`, copies the complete x64 `Microsoft.VC143.CRT` side-by-side, and falls back to the runner's System32 CRT family only if the Visual Studio redist layout changes. CI now confirms the QML main window through the persistent startup log for both portable and installed-shortcut launches and always uploads Windows diagnostics.
+
+## v6.0.11 QML startup correction
+Run #10 reached native Windows process startup and captured `Main.qml:324: Cannot assign to non-existent property "letterSpacing"`. The header subtitle now uses `font.letterSpacing`, which is the valid grouped font property for `Label`. A release gate rejects any future direct `letterSpacing:` assignment so the same runtime-only QML failure cannot recur.

@@ -48,3 +48,6 @@ A real-device report showed that the installed Windows shortcut could appear to 
 
 ## Windows runtime stabilization — v6.0.10
 GitHub Actions Run #9 confirmed that source audit, Android APK/AAB, Windows configure, and Windows compilation all succeeded. The sole failure occurred in runtime deployment because `windeployqt --compiler-runtime` did not copy `msvcp140.dll` when `VCINSTALLDIR` was not exported by the runner shell. v6.0.10 packages the complete VC143 CRT explicitly via `vswhere`, validates `msvcp140.dll`, `vcruntime140.dll`, and `vcruntime140_1.dll`, pins Qt Quick to the software renderer and Basic Controls style on Windows, initializes the application identity before logging, verifies the QML main window from the startup log, and always preserves Windows diagnostics.
+
+## Windows QML startup correction — v6.0.11
+GitHub Actions Run #10 proved that source audit, Android APK/AAB, Windows compilation, Qt deployment, and VC143 runtime bundling all succeeded. The native Windows startup smoke test then exposed the real UI failure: `ui/Main.qml` assigned `letterSpacing` directly on a `Label`, which Qt 6.11 rejects at runtime. v6.0.11 changes this to the valid grouped property `font.letterSpacing`, adds a source audit preventing direct `letterSpacing:` assignments, and keeps the native portable/installed-shortcut startup gates enabled.
