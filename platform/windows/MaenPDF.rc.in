@@ -21,11 +21,11 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "MaenPDF\0"
             VALUE "FileDescription", "MaenPDF PDF Application\0"
-            VALUE "FileVersion", "6.0.7\0"
+            VALUE "FileVersion", "6.0.8\0"
             VALUE "InternalName", "MaenPDF\0"
             VALUE "OriginalFilename", "MaenPDF.exe\0"
             VALUE "ProductName", "MaenPDF\0"
-            VALUE "ProductVersion", "6.0.7\0"
+            VALUE "ProductVersion", "6.0.8\0"
         END
     END
     BLOCK "VarFileInfo"

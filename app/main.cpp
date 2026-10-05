@@ -15,7 +15,7 @@ int main(int argc, char *argv[]) {
     QGuiApplication::setOrganizationName(QStringLiteral("MaenPDF"));
     QGuiApplication::setOrganizationDomain(QStringLiteral("maenpdf.local"));
     QGuiApplication::setApplicationName(QStringLiteral("MaenPDF"));
-    QGuiApplication::setApplicationVersion(QStringLiteral("6.0.7"));
+    QGuiApplication::setApplicationVersion(QStringLiteral("6.0.8"));
     QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/qt/qml/PDFStudio/assets/maenpdf-logo.svg")));
 
     LanguageManager languageManager;

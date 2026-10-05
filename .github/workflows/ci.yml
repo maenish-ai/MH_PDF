@@ -216,38 +216,39 @@ jobs:
           QT_ANDROID_KEYSTORE_KEY_PASS: maenpdf-ci-test
         run: cmake --build build-android --target apk --parallel
 
-      - name: Build unsigned AAB for validation
-        run: cmake --build build-android --target aab --parallel
-
-      - name: Verify and collect Android artifacts
+      # Qt's AAB target may regenerate the Android output directory and replace
+      # the previously signed APK with an unsigned intermediate. Preserve the
+      # verified installable APK before invoking the AAB target.
+      - name: Verify and preserve signed test APK
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p dist-android
 
-          signed_apk=""
-          while IFS= read -r apk; do
-            if "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner" verify "$apk" >/dev/null 2>&1; then
-              signed_apk="$apk"
-              break
-            fi
-          done < <(find build-android -type f -name '*.apk' -print)
-
+          signed_apk="$(find build-android -type f -name '*-signed.apk' -print -quit)"
           if [ -z "$signed_apk" ]; then
-            echo "No cryptographically signed APK was produced." >&2
+            echo "The signed APK output was not produced." >&2
             find build-android -type f -name '*.apk' -print >&2
             exit 1
           fi
 
           "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$signed_apk"
           cp -v "$signed_apk" dist-android/MaenPDF-Installable-Test.apk
+          "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner" verify --verbose dist-android/MaenPDF-Installable-Test.apk
 
+      - name: Build AAB for validation
+        run: cmake --build build-android --target aab --parallel
+
+      - name: Collect AAB validation artifact
+        shell: bash
+        run: |
+          set -euo pipefail
           aab="$(find build-android -type f -name '*.aab' -print -quit)"
           if [ -z "$aab" ]; then
             echo "AAB was not produced." >&2
             exit 1
           fi
-          cp -v "$aab" dist-android/MaenPDF-Unsigned-For-Play-Validation.aab
+          cp -v "$aab" dist-android/MaenPDF-For-Play-Validation.aab
 
       - uses: actions/upload-artifact@v7.0.1
         with:

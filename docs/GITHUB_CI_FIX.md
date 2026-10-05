@@ -21,3 +21,7 @@ Run #3 progressed past Qt installation, QML parsing, Windows generator selection
 Do not remove these guards unless the Qt backend/API or Android toolchain architecture changes.
 
 - GitHub Actions runtime hygiene: checkout v7.0.1, setup-python v7.0.0, setup-android v4.0.4, and upload-artifact v7.0.1 all use Node.js 24, eliminating the Node.js 20 deprecation annotations.
+
+## v6.0.8 Android artifact-order correction
+
+GitHub Actions run #7 proved that the Android application itself compiles and that Qt produces a correctly signed release APK (`android-build-release-signed.apk`). The subsequent AAB target regenerates Android packaging outputs and can replace the APK output directory with an unsigned intermediate before a later collection step runs. The CI now verifies and copies the signed APK into `dist-android/MaenPDF-Installable-Test.apk` immediately after the APK target, then builds and collects the AAB separately. A release audit enforces this ordering.

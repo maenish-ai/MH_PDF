@@ -35,3 +35,9 @@ These fixes are also guarded by the source/release audits. The next GitHub Actio
 
 ### Android direct-install artifact
 The standard CI workflow now generates a release-mode `MaenPDF-Installable-Test.apk` signed with an ephemeral CI-only key, verifies it with Android `apksigner`, and uploads it in the `MaenPDF-Android-Installable-Test` artifact. This fixes the previous situation where CI exposed only an unsigned release APK that Android refused to install. The AAB remains non-installable directly and is for bundle validation only; production Play signing remains isolated in `play-release.yml` with persistent secrets.
+
+## GitHub Actions Run #7 — v6.0.8 fix
+
+Run #7 confirmed that the complete Windows pipeline is healthy: MSVC build, Qt runtime deployment, portable startup smoke test, Inno Setup installer creation, installed-app smoke test, and both Windows artifact uploads all passed.
+
+Android also compiled both ABIs and successfully produced a cryptographically signed release APK. `apksigner` verified one signer using APK Signature Scheme v3. The failure occurred only afterward: invoking Qt's `aab` target regenerated the Android output directory and the final collection step could then see only an unsigned APK intermediate. v6.0.8 fixes the workflow ordering by verifying and copying the signed APK to `dist-android/MaenPDF-Installable-Test.apk` immediately after the APK target, before the AAB target runs. The AAB is collected separately afterward.

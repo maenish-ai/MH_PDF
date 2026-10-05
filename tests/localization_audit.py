@@ -12,9 +12,11 @@ checks['English catalog has no Arabic characters']=not any(re.search(r'[\u0600-\
 def visible_arabic(v):
     v=re.sub(r'\*\.[A-Za-z0-9]+','',v)
     v=re.sub(r'%\d+','',v)
+    v=v.replace('MaenPDF','')
     return v
-checks['Arabic catalog has Arabic for every entry']=all(re.search(r'[\u0600-\u06FF]',visible_arabic(v)) for v in ar.values())
+checks['Arabic catalog has Arabic for every entry']=all(k == 'app.brand' or re.search(r'[\u0600-\u06FF]',visible_arabic(v)) for k,v in ar.items())
 checks['Arabic catalog has no stray Latin UI words']=all(not re.search(r'[A-Za-z]{2,}',visible_arabic(v)) for v in ar.values())
+checks['MaenPDF brand is exact in both languages']=en.get('app.brand') == 'MaenPDF' and ar.get('app.brand') == 'MaenPDF'
 # All tx() references must exist.
 refs=set(re.findall(r'tx\("([^"]+)"',qml))
 checks['all QML translation keys exist']=refs <= set(en)

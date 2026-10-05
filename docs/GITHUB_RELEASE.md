@@ -16,8 +16,8 @@ The build jobs depend on the audit job, so packaging cannot start when a release
 
 ## Stable Android identity
 - Package ID: `org.orbispdf.app`
-- v6 versionName: `6.0.7`
-- v6 versionCode: `60007`
+- v6 versionName: `6.0.8`
+- v6 versionCode: `60008`
 - minSdk: 28
 - target/compile SDK: 36
 

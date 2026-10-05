@@ -9,9 +9,9 @@ play=(root/'.github/workflows/play-release.yml').read_text(encoding='utf-8')
 manifest=(root/'android/AndroidManifest.xml').read_text(encoding='utf-8')
 ard=(root/'android/README.md').read_text(encoding='utf-8')
 checks.update({
- 'v6 semantic version':'project(MaenPDF VERSION 6.0.7' in cm,
+ 'v6 semantic version':'project(MaenPDF VERSION 6.0.8' in cm,
  'stable package id':'org.orbispdf.app' in cm and 'org.orbispdf.app' in ard,
- 'version code fixed':'QT_ANDROID_VERSION_CODE 60007' in cm,
+ 'version code fixed':'QT_ANDROID_VERSION_CODE 60008' in cm,
  'api36 target':'QT_ANDROID_TARGET_SDK_VERSION 36' in cm and "ANDROID_API: '36'" in wf,
  'min api28':'QT_ANDROID_MIN_SDK_VERSION 28' in cm and "ANDROID_MIN_API: '28'" in wf,
  'Qt pinned':'QT_VERSION: \'6.11.2\'' in wf,
@@ -25,6 +25,8 @@ checks.update({
  'Android APK/AAB':'--target apk' in wf and '--target aab' in wf,
  'CI produces signed installable Android test APK':'-DQT_ANDROID_SIGN_APK=ON' in wf and 'MaenPDF-Installable-Test.apk' in wf and 'apksigner' in wf,
  'CI Android artifact no longer labeled unsigned':'MaenPDF-Android-Installable-Test' in wf and 'MaenPDF-Android-unsigned' not in wf,
+ 'CI Android signed APK preserved before AAB rebuild':('Verify and preserve signed test APK' in wf and 'Build AAB for validation' in wf and wf.index('Verify and preserve signed test APK') < wf.index('Build AAB for validation')),
+ 'CI targets explicit signed APK output':"-name '*-signed.apk'" in wf and 'MaenPDF-Installable-Test.apk' in wf,
  'Android setup avoids obsolete SDK tools package':'packages: platform-tools' in wf and 'packages: platform-tools' in play,
  'Android cross-compile host Qt path':'-DQT_HOST_PATH="$RUNNER_TEMP/Qt/${QT_VERSION}/gcc_64"' in wf and '-DQT_HOST_PATH="$RUNNER_TEMP/Qt/${QT_VERSION}/gcc_64"' in play,
  'Android host Qt validated':'gcc_64/lib/cmake/Qt6/Qt6Config.cmake' in wf and 'gcc_64/lib/cmake/Qt6/Qt6Config.cmake' in play,
