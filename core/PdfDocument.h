@@ -42,10 +42,13 @@ public:
     bool canRedo() const { return m_undo.canRedo(); }
     bool hasPageClipboard() const { return m_hasClipboard; }
     bool recoveryAvailable() const { return m_recoveryAvailable; }
-    QString engineName() const { return QStringLiteral("MaenPDF Engine 6"); }
+    QString engineName() const { return QStringLiteral("MaenPDF Engine 7"); }
+    QString providerNamespace() const { return m_pages.providerNamespace(); }
+    void setProviderNamespace(const QString &value) { m_pages.setProviderNamespace(value); }
 
     Q_INVOKABLE bool newDocument();
     Q_INVOKABLE bool openDocument(const QString &path);
+    Q_INVOKABLE bool openDocumentWithPassword(const QString &path, const QString &password);
     Q_INVOKABLE bool appendPdf(const QString &path);
     Q_INVOKABLE bool save();
     Q_INVOKABLE bool saveAs(const QString &path);
@@ -63,9 +66,12 @@ public:
     Q_INVOKABLE void addImage(int page, const QString &path, double x = .15, double y = .15, double w = .5, double h = .5);
     Q_INVOKABLE void addText(int page, double x, double y, const QString &text, int fontSize = 18);
     Q_INVOKABLE void addHighlight(int page, double x, double y, double w, double h);
+    Q_INVOKABLE void addRedaction(int page, double x, double y, double w, double h);
+    Q_INVOKABLE void cropPage(int page, double x, double y, double w, double h);
     Q_INVOKABLE void addInk(int page, const QVariantList &points);
     Q_INVOKABLE void addWatermark(const QString &text, int fontSize = 42, int opacity = 45);
     Q_INVOKABLE void addPageNumbers();
+    Q_INVOKABLE void addBatesNumbers(const QString &prefix, int start = 1, int padding = 6);
 
     Q_INVOKABLE void undo() { m_undo.undo(); }
     Q_INVOKABLE void redo() { m_undo.redo(); }
@@ -81,6 +87,7 @@ public:
     Q_INVOKABLE void setCurrentPage(int page);
     Q_INVOKABLE QString normalizedPath(const QString &path) const;
     Q_INVOKABLE QVariantMap properties() const;
+    Q_INVOKABLE void refreshMemoryPolicy() { m_pages.refreshMemoryPolicy(); }
 
 signals:
     void filePathChanged();
@@ -93,6 +100,7 @@ signals:
     void clipboardChanged();
     void errorOccurred(QString key, QVariantList args);
     void info(QString key, QVariantList args);
+    void passwordRequired(QString path);
 
 private:
     QString m_filePath;
@@ -110,7 +118,7 @@ private:
 
     void markModified(bool value = true);
     PageItem blank() const;
-    bool loadIntoModel(const QString &path, bool append);
+    bool loadIntoModel(const QString &path, bool append, const QString &password = QString());
     QImage renderBase(const PageItem &page, const QSize &requestedSize) const;
     void ensureOverlay(PageItem *page);
     bool exportPdf(const QString &localPath, int onlyPage = -1);

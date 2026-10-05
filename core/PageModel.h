@@ -23,6 +23,7 @@ struct PageItem {
     int watermarkFontSize{42};
     int watermarkOpacity{0};
     bool pageNumber{false};
+    QString batesText;
 
     bool sourceBacked() const { return !sourceId.isEmpty() && sourcePage >= 0 && base.isNull(); }
 };
@@ -40,6 +41,9 @@ public:
     QHash<int, QByteArray> roleNames() const override;
 
     void setRenderer(RenderFunction renderer);
+    void setProviderNamespace(const QString &value);
+    QString providerNamespace() const { return m_providerNamespace; }
+    void refreshMemoryPolicy();
     void clear();
     void append(PageItem page);
     void insert(int at, PageItem page);
@@ -52,6 +56,8 @@ public:
     void changed(int index);
 
     Q_INVOKABLE QString imageSource(int row) const { return imageUrlForRow(row); }
+    Q_INVOKABLE double pageWidth(int row) const { const auto *p = page(row); return p ? p->points.width() : 595.0; }
+    Q_INVOKABLE double pageHeight(int row) const { const auto *p = page(row); return p ? p->points.height() : 842.0; }
     QImage renderPage(int index, const QSize &requestedSize = {}) const;
     QVariantMap cacheStats() const;
     void clearCache() const;
@@ -75,4 +81,5 @@ private:
     mutable qint64 m_cacheBytes{0};
     qint64 m_cacheBudget{0};
     int m_modelRevision{0};
+    QString m_providerNamespace{QStringLiteral("0")};
 };

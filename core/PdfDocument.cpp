@@ -5,6 +5,7 @@
 #include "MemoryPolicy.h"
 #include "QtPdfBackend.h"
 
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
@@ -48,7 +49,7 @@ PdfDocument::PdfDocument(QObject *parent) : QObject(parent) {
     newDocument();
     m_modified = false;
     refreshRecoveryState();
-    AppLogger::write(QStringLiteral("INFO"), QStringLiteral("Document engine 6 initialized"));
+    AppLogger::write(QStringLiteral("INFO"), QStringLiteral("Document engine 7 initialized"));
 }
 
 PdfDocument::~PdfDocument() { cleanupTemporaryInputs(); }
@@ -182,15 +183,20 @@ bool PdfDocument::newDocument() {
     return true;
 }
 
-bool PdfDocument::loadIntoModel(const QString &path, bool append) {
+bool PdfDocument::loadIntoModel(const QString &path, bool append, const QString &password) {
     const QString localPath = prepareReadablePath(path);
     if (localPath.isEmpty())
         return false;
 
     auto backend = std::make_shared<QtPdfBackend>();
     QString error;
-    if (!backend->open(localPath, &error)) {
-        emit errorOccurred(QStringLiteral("error.open_pdf"), {});
+    if (!backend->open(localPath, password, &error)) {
+        if (error == QStringLiteral("password"))
+            emit passwordRequired(path);
+        else if (error == QStringLiteral("unsupported-security"))
+            emit errorOccurred(QStringLiteral("error.unsupported_security"), {});
+        else
+            emit errorOccurred(QStringLiteral("error.open_pdf"), {});
         return false;
     }
 
@@ -213,6 +219,27 @@ bool PdfDocument::loadIntoModel(const QString &path, bool append) {
 
 bool PdfDocument::openDocument(const QString &path) {
     if (!loadIntoModel(path, false))
+        return false;
+    if (!m_pages.count())
+        m_pages.append(blank());
+    m_filePath = normalizedPath(path);
+    m_currentPage = 0;
+    m_undo.clear();
+    m_hasClipboard = false;
+    emit clipboardChanged();
+    markModified(false);
+    emit filePathChanged();
+    emit pageCountChanged();
+    emit currentPageChanged();
+    return true;
+}
+
+bool PdfDocument::openDocumentWithPassword(const QString &path, const QString &password) {
+    if (password.isEmpty()) {
+        emit passwordRequired(path);
+        return false;
+    }
+    if (!loadIntoModel(path, false, password))
         return false;
     if (!m_pages.count())
         m_pages.append(blank());
@@ -575,7 +602,15 @@ bool PdfDocument::protectCopy(const QString &outputPath, const QString &user, co
         emit errorOccurred(QStringLiteral("error.password_required"), {});
         return false;
     }
-    const QString qpdf = QStandardPaths::findExecutable(QStringLiteral("qpdf"));
+    QString qpdf = QStandardPaths::findExecutable(QStringLiteral("qpdf"));
+    if (qpdf.isEmpty()) {
+        QString bundled = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("tools/qpdf/qpdf"));
+#ifdef Q_OS_WIN
+        bundled += QStringLiteral(".exe");
+#endif
+        if (QFileInfo::exists(bundled))
+            qpdf = bundled;
+    }
     if (qpdf.isEmpty()) {
         emit errorOccurred(QStringLiteral("error.security_provider_missing"), {});
         return false;
@@ -795,6 +830,65 @@ void PdfDocument::addHighlight(int pageIndex, double x, double y, double width, 
     snapshotCommand(pageIndex, before, after, QStringLiteral("Highlight"));
 }
 
+void PdfDocument::addRedaction(int pageIndex, double x, double y, double width, double height) {
+    if (m_locked) return;
+    auto *page = m_pages.page(pageIndex);
+    if (!page) return;
+    const double nx = qBound(0.0, qMin(x, x + width), 1.0);
+    const double ny = qBound(0.0, qMin(y, y + height), 1.0);
+    const double nw = qBound(0.0, qAbs(width), 1.0 - nx);
+    const double nh = qBound(0.0, qAbs(height), 1.0 - ny);
+    if (nw < 0.002 || nh < 0.002) return;
+    ensureOverlay(page);
+    const QImage before = page->overlay;
+    QImage after = before;
+    QPainter painter(&after);
+    painter.fillRect(QRectF(nx * after.width(), ny * after.height(), nw * after.width(), nh * after.height()), Qt::black);
+    painter.end();
+    snapshotCommand(pageIndex, before, after, QStringLiteral("Secure flattened redaction"));
+    emit info(QStringLiteral("info.redaction_added"), {});
+}
+
+void PdfDocument::cropPage(int pageIndex, double x, double y, double width, double height) {
+    if (m_locked) return;
+    auto *page = m_pages.page(pageIndex);
+    if (!page) return;
+    const double nx = qBound(0.0, qMin(x, x + width), 1.0);
+    const double ny = qBound(0.0, qMin(y, y + height), 1.0);
+    const double nw = qBound(0.0, qAbs(width), 1.0 - nx);
+    const double nh = qBound(0.0, qAbs(height), 1.0 - ny);
+    if (nw < 0.05 || nh < 0.05) return;
+
+    const PageItem before = *page;
+    QSize renderSize = (page->points * 2.0).toSize();
+    const int maxDim = MemoryPolicy::maxRenderDimension();
+    renderSize.setWidth(qBound(600, renderSize.width(), maxDim));
+    renderSize.setHeight(qBound(800, renderSize.height(), maxDim));
+    const QImage rendered = m_pages.renderPage(pageIndex, renderSize);
+    if (rendered.isNull()) return;
+    QRect crop(qRound(nx * rendered.width()), qRound(ny * rendered.height()),
+               qRound(nw * rendered.width()), qRound(nh * rendered.height()));
+    crop = crop.intersected(rendered.rect());
+    if (crop.width() < 32 || crop.height() < 32) return;
+
+    PageItem after = before;
+    after.base = rendered.copy(crop);
+    after.overlay = QImage();
+    after.sourceId.clear();
+    after.sourcePage = -1;
+    after.rotation = 0;
+    after.points = QSizeF(before.points.width() * nw, before.points.height() * nh);
+    after.watermarkText.clear();
+    after.watermarkOpacity = 0;
+    after.pageNumber = false;
+    after.batesText.clear();
+
+    m_undo.push(new LambdaCommand(QStringLiteral("Crop page"),
+        [this, pageIndex, before] { if (auto *p = m_pages.page(pageIndex)) { *p = before; m_pages.changed(pageIndex); markModified(); } },
+        [this, pageIndex, after] { if (auto *p = m_pages.page(pageIndex)) { *p = after; m_pages.changed(pageIndex); markModified(); } }));
+    emit info(QStringLiteral("info.page_cropped"), {});
+}
+
 void PdfDocument::addInk(int pageIndex, const QVariantList &points) {
     if (m_locked || points.size() < 4) return;
     auto *page = m_pages.page(pageIndex); if (!page) return;
@@ -876,6 +970,34 @@ void PdfDocument::addPageNumbers() {
         }, true));
     markModified();
     emit info(QStringLiteral("info.page_numbers_added"), {});
+}
+
+void PdfDocument::addBatesNumbers(const QString &prefix, int start, int padding) {
+    if (m_locked) return;
+    const int safePadding = qBound(1, padding, 12);
+    QVector<QString> before;
+    before.reserve(m_pages.count());
+    QVector<QString> after;
+    after.reserve(m_pages.count());
+    for (int i = 0; i < m_pages.count(); ++i) {
+        before.push_back(m_pages.page(i)->batesText);
+        const QString number = QString::number(qMax(0, start + i)).rightJustified(safePadding, QLatin1Char('0'));
+        const QString value = prefix + number;
+        after.push_back(value);
+        m_pages.page(i)->batesText = value;
+        m_pages.changed(i);
+    }
+    m_undo.push(new LambdaCommand(QStringLiteral("Bates numbering"),
+        [this, before] {
+            for (int i = 0; i < before.size() && i < m_pages.count(); ++i) { m_pages.page(i)->batesText = before[i]; m_pages.changed(i); }
+            markModified();
+        },
+        [this, after] {
+            for (int i = 0; i < after.size() && i < m_pages.count(); ++i) { m_pages.page(i)->batesText = after[i]; m_pages.changed(i); }
+            markModified();
+        }, true));
+    markModified();
+    emit info(QStringLiteral("info.bates_added"), {m_pages.count()});
 }
 
 void PdfDocument::setLocked(bool value) {

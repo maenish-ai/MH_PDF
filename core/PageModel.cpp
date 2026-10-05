@@ -31,6 +31,21 @@ void PageModel::setRenderer(RenderFunction renderer) {
     clearCache();
 }
 
+void PageModel::setProviderNamespace(const QString &value) {
+    const QString normalized = value.isEmpty() ? QStringLiteral("0") : value;
+    if (normalized == m_providerNamespace)
+        return;
+    m_providerNamespace = normalized;
+    ++m_modelRevision;
+    emit modelRevisionChanged();
+    clearCache();
+}
+
+void PageModel::refreshMemoryPolicy() {
+    m_cacheBudget = MemoryPolicy::renderCacheBudgetBytes();
+    clearCache();
+}
+
 void PageModel::ensureIdentity(PageItem &page) {
     if (page.uid.isEmpty())
         page.uid = QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -102,7 +117,7 @@ QString PageModel::imageUrlForRow(int row) const {
     if (row < 0 || row >= m_pages.size())
         return {};
     const auto &page = m_pages[row];
-    return QStringLiteral("image://maenpdf/page/%1/%2/%3").arg(row).arg(page.revision).arg(page.uid);
+    return QStringLiteral("image://maenpdf/%1/page/%2/%3/%4").arg(m_providerNamespace).arg(row).arg(page.revision).arg(page.uid);
 }
 
 QSize PageModel::defaultPixelSize(const PageItem &page) const {
@@ -211,6 +226,16 @@ QImage PageModel::renderPage(int row, const QSize &requestedSize) const {
         painter.setPen(QColor(50, 50, 50));
         painter.drawText(QRect(0, qRound(base.height() * 0.93), base.width(), qRound(base.height() * 0.05)),
                          Qt::AlignCenter, QString::number(row + 1));
+    }
+
+    if (!page.batesText.isEmpty()) {
+        QFont font;
+        font.setPixelSize(qMax(10, qRound(base.height() * 0.016)));
+        painter.setFont(font);
+        painter.setPen(QColor(55, 55, 55));
+        const int margin = qMax(10, qRound(base.width() * 0.025));
+        painter.drawText(QRect(margin, qRound(base.height() * 0.92), base.width() - margin * 2, qRound(base.height() * 0.05)),
+                         Qt::AlignRight | Qt::AlignVCenter, page.batesText);
     }
     painter.end();
 

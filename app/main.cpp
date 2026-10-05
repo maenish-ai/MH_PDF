@@ -23,9 +23,11 @@
 #endif
 
 #include "../core/AppLogger.h"
+#include "../core/AppSettings.h"
+#include "../core/DocumentManager.h"
 #include "../core/LanguageManager.h"
-#include "../core/PageImageProvider.h"
-#include "../core/PdfDocument.h"
+#include "../core/PdfToolsService.h"
+#include "../core/SessionImageProvider.h"
 
 namespace {
 void showStartupFailure(const QString &details)
@@ -72,7 +74,7 @@ int main(int argc, char *argv[])
     QGuiApplication::setOrganizationName(QStringLiteral("MaenPDF"));
     QGuiApplication::setOrganizationDomain(QStringLiteral("maenpdf.local"));
     QGuiApplication::setApplicationName(QStringLiteral("MaenPDF"));
-    QGuiApplication::setApplicationVersion(QStringLiteral("6.0.11"));
+    QGuiApplication::setApplicationVersion(QStringLiteral("7.0.0"));
     AppLogger::install();
 
     // Make startup independent of how the process was launched (desktop
@@ -80,7 +82,7 @@ int main(int argc, char *argv[])
     QDir::setCurrent(QCoreApplication::applicationDirPath());
 
     AppLogger::write(QStringLiteral("INFO"),
-                     QStringLiteral("MaenPDF 6.0.11 startup; Qt %1; appDir=%2; cwd=%3; QT_QUICK_BACKEND=%4")
+                     QStringLiteral("MaenPDF 7.0.0 startup; Qt %1; appDir=%2; cwd=%3; QT_QUICK_BACKEND=%4")
                          .arg(QString::fromLatin1(qVersion()),
                               QCoreApplication::applicationDirPath(),
                               QDir::currentPath(),
@@ -90,13 +92,17 @@ int main(int argc, char *argv[])
         QIcon(QStringLiteral(":/qt/qml/PDFStudio/assets/maenpdf-logo.svg")));
 
     LanguageManager languageManager;
-    PdfDocument document;
+    AppSettings appSettings;
+    DocumentManager documentManager(&appSettings);
+    PdfToolsService pdfTools;
 
     QQmlApplicationEngine engine;
-    engine.rootContext()->setContextProperty(QStringLiteral("pdfDocument"), &document);
+    engine.rootContext()->setContextProperty(QStringLiteral("documentManager"), &documentManager);
+    engine.rootContext()->setContextProperty(QStringLiteral("appSettings"), &appSettings);
+    engine.rootContext()->setContextProperty(QStringLiteral("pdfTools"), &pdfTools);
     engine.rootContext()->setContextProperty(QStringLiteral("i18n"), &languageManager);
     engine.addImageProvider(QStringLiteral("maenpdf"),
-                            new PageImageProvider(document.pageModel()));
+                            new SessionImageProvider(&documentManager));
 
     engine.loadFromModule(QStringLiteral("PDFStudio"), QStringLiteral("Main"));
     if (engine.rootObjects().isEmpty()) {
@@ -109,7 +115,7 @@ int main(int argc, char *argv[])
     AppLogger::write(QStringLiteral("INFO"), QStringLiteral("Main window created successfully"));
 
     if (argc > 1)
-        document.openDocument(QString::fromLocal8Bit(argv[1]));
+        documentManager.openDocument(QString::fromLocal8Bit(argv[1]));
 
     return app.exec();
 }

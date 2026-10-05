@@ -1,5 +1,5 @@
 #define MyAppName "MaenPDF"
-#define MyAppVersion "6.0.11"
+#define MyAppVersion "7.0.0"
 #define MyAppPublisher "MaenPDF"
 #define MyAppExeName "MaenPDF.exe"
 
@@ -23,7 +23,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
 CloseApplications=yes
 RestartApplications=no
-VersionInfoVersion=6.0.11.0
+VersionInfoVersion=7.0.0.0
 VersionInfoProductName={#MyAppName}
 VersionInfoDescription=MaenPDF Installer
 
@@ -42,3 +42,9 @@ Name: "{autodesktop}\MaenPDF"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch MaenPDF"; Flags: nowait postinstall skipifsilent
+
+[Registry]
+Root: HKCU; Subkey: "Software\Classes\MaenPDF.Document"; ValueType: string; ValueName: ""; ValueData: "MaenPDF PDF Document"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\MaenPDF.Document\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\MaenPDF.exe,0"
+Root: HKCU; Subkey: "Software\Classes\MaenPDF.Document\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\MaenPDF.exe"" ""%1"""
+Root: HKCU; Subkey: "Software\Classes\.pdf\OpenWithProgids"; ValueType: none; ValueName: "MaenPDF.Document"; Flags: uninsdeletevalue

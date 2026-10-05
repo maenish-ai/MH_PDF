@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(MaenPDF VERSION 6.0.11 LANGUAGES CXX)
+project(MaenPDF VERSION 7.0.0 LANGUAGES CXX)
 
 include(GNUInstallDirs)
 
@@ -20,13 +20,17 @@ qt_add_executable(MaenPDF
     core/IPdfBackend.h core/QtPdfBackend.cpp core/QtPdfBackend.h
     core/MemoryPolicy.cpp core/MemoryPolicy.h
     core/LanguageManager.cpp core/LanguageManager.h
+    core/AppSettings.cpp core/AppSettings.h
+    core/DocumentManager.cpp core/DocumentManager.h
+    core/SessionImageProvider.cpp core/SessionImageProvider.h
+    core/PdfToolsService.cpp core/PdfToolsService.h
 )
 
 set_source_files_properties(ui/Main.qml PROPERTIES QT_RESOURCE_ALIAS Main.qml)
 
 qt_add_qml_module(MaenPDF
     URI PDFStudio
-    VERSION 6.0
+    VERSION 7.0
     QML_FILES ui/Main.qml
     RESOURCES assets/maenpdf-logo.svg
 )
@@ -62,8 +66,8 @@ if(ANDROID)
     set_property(TARGET MaenPDF PROPERTY QT_ANDROID_MIN_SDK_VERSION 28)
     set_property(TARGET MaenPDF PROPERTY QT_ANDROID_TARGET_SDK_VERSION 36)
     set_property(TARGET MaenPDF PROPERTY QT_ANDROID_COMPILE_SDK_VERSION 36)
-    set_property(TARGET MaenPDF PROPERTY QT_ANDROID_VERSION_CODE 60011)
-    set_property(TARGET MaenPDF PROPERTY QT_ANDROID_VERSION_NAME "6.0.11")
+    set_property(TARGET MaenPDF PROPERTY QT_ANDROID_VERSION_CODE 70000)
+    set_property(TARGET MaenPDF PROPERTY QT_ANDROID_VERSION_NAME "7.0.0")
 endif()
 
 if(ANDROID)

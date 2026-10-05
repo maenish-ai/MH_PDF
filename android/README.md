@@ -1,26 +1,22 @@
-# Android release contract
+# MaenPDF Android
 
-- Package ID: `org.orbispdf.app`. **Do not change it after the first Play release.**
-- Version: `6.0.11`, versionCode `60011`.
-- Modern runtime target: Android 9 / API 28 and newer.
-- Google Play compile/target API: 36.
-- CI toolchain: Qt 6.11.2, JDK 21, Android NDK 27.2.12479018.
-- GitHub CI builds an unsigned APK and AAB for validation.
-- ARM64 and ARMv7 Qt SDKs are installed in CI so the modern package can cover both 64-bit and 32-bit ARM devices supported by this Qt line.
+MaenPDF 7 targets Android API 36 with minimum API 28. The internal package ID remains `org.orbispdf.app` for update continuity with earlier builds.
 
-## Updates without data loss
-Keep the same package ID and the same signing key and only increase `QT_ANDROID_VERSION_CODE`. Android then treats the next release as an update of the same app. Preferences, recovery data and app-private files remain in the app data area; user PDF files remain user documents.
+## CI test installation
 
-## Signing
-Never commit a `.jks`/`.keystore` file or passwords. Configure Play App Signing and store upload-key material in GitHub Actions secrets when the Play Console project is created.
+The standard CI workflow creates `MaenPDF-Installable-Test.apk`, signs it with an ephemeral CI-only key and verifies it with `apksigner`. It can be installed directly for testing on a compatible Android device. Because the CI test key changes between workflow runs, uninstall an older CI-test build first if Android reports a signing-key mismatch.
 
-## Legacy Android
-Android versions older than API 28 are outside the supported runtime range of the modern Qt line used by MaenPDF v6. They require a separately maintained legacy branch and must not be advertised as supported until that branch is built and tested.
+An `.aab` is a Play/Bundle artifact and is not installed directly on a phone.
 
-A manual GitHub workflow, `.github/workflows/play-release.yml`, is included for signed Play artifacts once the four signing secrets documented in `docs/GITHUB_RELEASE.md` are configured. It does not run on ordinary pushes.
+## Production updates
 
-## CI test APK installation
+For a production Play release:
 
-The normal CI workflow creates `MaenPDF-Installable-Test.apk`, a release-mode APK signed with an ephemeral CI-only test key and verified with `apksigner`. It is intended only for direct device testing. The accompanying `.aab` is not directly installable on Android; it is retained only for bundle validation. For Play distribution, use the separate `play-release.yml` workflow with the real persistent upload keystore stored in GitHub Secrets.
+- keep the same package ID;
+- keep the same signing key (the production signing key);
+- increase `QT_ANDROID_VERSION_CODE` for every update;
+- keep release signing secrets outside the repository.
 
-Because the CI test key is generated afresh on every workflow run, uninstall a test build from the device before installing an APK produced by a different CI run if Android reports a signature/update conflict. Never use the CI test key for production or Google Play releases.
+## Local file behavior
+
+MaenPDF supports Android document-provider `content://` URIs. Documents are processed locally; there is no MaenPDF document cloud service.

@@ -9,7 +9,7 @@ class IPdfBackend {
 public:
     virtual ~IPdfBackend() = default;
     virtual QString name() const = 0;
-    virtual bool open(const QString &path, QString *error = nullptr) = 0;
+    virtual bool open(const QString &path, const QString &password = QString(), QString *error = nullptr) = 0;
     virtual int pageCount() const = 0;
     virtual QSizeF pagePointSize(int page) const = 0;
     virtual QImage render(int page, const QSize &pixels) const = 0;

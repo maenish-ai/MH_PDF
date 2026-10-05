@@ -1,10 +1,21 @@
 #include "QtPdfBackend.h"
 #include <QPdfSelection>
 
-bool QtPdfBackend::open(const QString &path, QString *error) {
+bool QtPdfBackend::open(const QString &path, const QString &password, QString *error) {
+    m_doc.close();
+    if (!password.isEmpty())
+        m_doc.setPassword(password);
     const auto e = m_doc.load(path);
-    if (e == QPdfDocument::Error::None) return true;
-    if (error) *error = "Unable to open PDF. It may be encrypted, damaged, or unsupported.";
+    if (e == QPdfDocument::Error::None)
+        return true;
+    if (error) {
+        if (e == QPdfDocument::Error::IncorrectPassword)
+            *error = QStringLiteral("password");
+        else if (e == QPdfDocument::Error::UnsupportedSecurityScheme)
+            *error = QStringLiteral("unsupported-security");
+        else
+            *error = QStringLiteral("open-failed");
+    }
     return false;
 }
 QString QtPdfBackend::pageText(int page) const {
