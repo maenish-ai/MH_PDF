@@ -1,11 +1,11 @@
-# Orbis PDF Professional — Quality Gate
+# MaenPDF — Quality Gate
 
-Orbis should not be marketed as an Acrobat-class replacement until the complete public-release matrix passes. Engineering milestones may be distributed for testing with their capability boundary stated clearly.
+MaenPDF should not be marketed as an Acrobat-class replacement until the complete public-release matrix passes. Engineering milestones may be distributed for testing with their capability boundary stated clearly.
 
 ## Release-blocking gates
 - **No data loss:** save uses write → reopen/verify → replacement with rollback for local files.
 - **Interoperability:** exported PDFs must be opened by multiple independent readers before public release.
-- **Security:** encrypted desktop output uses standard PDF encryption through the configured provider; passwords are never stored by Orbis.
+- **Security:** encrypted desktop output uses standard PDF encryption through the configured provider; passwords are never stored by MaenPDF.
 - **Undo/redo:** destructive page/edit operations require history coverage or explicit documentation.
 - **Memory:** opening large PDFs is lazy; render cache is bounded.
 - **Stress:** test 1, 10, 100, 500 and 1,000-page documents, malformed files, mixed page sizes and very large images.

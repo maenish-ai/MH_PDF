@@ -9,7 +9,7 @@ qtbackend=(root/'core/QtPdfBackend.h').read_text(encoding='utf-8')
 checks={
  'C++ delimiter balance':all((f.read_text(encoding='utf-8').count('{')==f.read_text(encoding='utf-8').count('}') and f.read_text(encoding='utf-8').count('(')==f.read_text(encoding='utf-8').count(')')) for f in (root/'core').glob('*.cpp')),
  'no duplicated rotate command':'m_undo.push(new LambdaCommand(QStringLiteral(\"Rotate page\"),\n    m_undo.push' not in cpp,
- 'safe atomic save':'atomicExportPdf' in cpp and '.orbis-backup' in cpp and 'QFile::rename(temp, target)' in cpp,
+ 'safe atomic save':'atomicExportPdf' in cpp and '.maenpdf-backup' in cpp and 'QFile::rename(temp, target)' in cpp,
  'save verification':'check.pageCount() != m_pages.count()' in cpp or 'check.pageCount()!=m_pages.count()' in cpp,
  'security timeout':'waitForFinished(60000)' in cpp,
  'unique security temp':'QTemporaryFile' in cpp,

@@ -1,6 +1,6 @@
-# Orbis PDF Professional 6.0
+# MaenPDF 6.0
 
-Orbis PDF is an original, cross-platform PDF workspace written in C++17 with Qt/QML. Its identity, logo, colors and control layout are intentionally distinct from Adobe Acrobat while targeting the same broad class of PDF workflows.
+MaenPDF is an original, cross-platform PDF workspace written in C++17 with Qt/QML. Its identity, logo, colors and control layout are intentionally distinct from Adobe Acrobat while targeting the same broad class of PDF workflows.
 
 ## v6 highlights
 - English and Arabic UI catalogs with persistent language choice.
@@ -41,10 +41,20 @@ python tests/engine_v6_audit.py
 Push the contents of this folder to the repository root. `.github/workflows/ci.yml` runs audits first, then Windows and Android builds. Build artifacts are uploaded by GitHub Actions.
 
 ## Android identity and updates
-The package ID is `org.orbispdf.app`. After the first Play release, keep the package ID and signing key unchanged and increase `QT_ANDROID_VERSION_CODE` for every update. This allows Android to update the installed application without replacing it as a different app; application-private data remains under the same identity.
+The package ID is `org.orbispdf.app`. It is retained internally for Android update continuity even though the visible product name is MaenPDF. After the first Play release, keep the package ID and signing key unchanged and increase `QT_ANDROID_VERSION_CODE` for every update. This allows Android to update the installed application without replacing it as a different app; application-private data remains under the same identity.
 
 ## Honest capability boundary
 v6 is not yet an Acrobat-equivalent structural PDF editor. Imported PDF pages remain source-backed for efficient viewing, while edits are rendered as overlays on export. True object-tree text/image editing, OCR, certificate-backed digital signatures, AcroForm authoring and true redaction remain disabled in the capability map until a suitable structural writer/provider and a regression corpus are integrated. No placeholder button is presented as if those features were complete.
 
 ## Community direction
 The intended public release can remain free for community use. Donation links should be optional and should only be added after official, verified donation destinations are selected. Donations must not unlock core PDF functionality.
+
+### Android test install
+GitHub CI publishes `MaenPDF-Installable-Test.apk` inside the `MaenPDF-Android-Installable-Test` artifact. That APK is signed with a CI-only test key and verified with `apksigner`, so it can be installed directly on a compatible Android device. Do not try to install the `.aab` directly; use the Play release workflow for production signing and distribution.
+
+
+## Windows installer
+
+The Windows CI job now produces `MaenPDF-Windows-Setup`, containing a single `MaenPDF-Setup.exe`. The workflow first deploys the full Qt runtime with `windeployqt`, verifies the required Windows platform and Qt PDF DLLs, launches the portable executable in an offscreen startup smoke test, builds the Inno Setup installer, installs it silently into a clean test directory, and launches the installed executable again. The setup creates Start Menu and optional Desktop shortcuts named **MaenPDF** and registers MaenPDF as an available PDF opener.
+
+For normal use, download the **MaenPDF-Windows-Setup** artifact and run `MaenPDF-Setup.exe`; do not copy only the portable EXE away from its Qt runtime folder.

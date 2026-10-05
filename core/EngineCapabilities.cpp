@@ -3,7 +3,7 @@
 
 QVariantMap EngineCapabilities::current() {
     QVariantMap capabilities;
-    capabilities[QStringLiteral("backend")] = QStringLiteral("Orbis Engine 6 / Qt PDF lazy reader backend");
+    capabilities[QStringLiteral("backend")] = QStringLiteral("MaenPDF Engine 6 / Qt PDF lazy reader backend");
     capabilities[QStringLiteral("openPdf")] = true;
     capabilities[QStringLiteral("createPdf")] = true;
     capabilities[QStringLiteral("pageOperations")] = true;

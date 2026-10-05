@@ -1,9 +1,9 @@
-# Orbis PDF 6.0 — Release Checklist
+# MaenPDF 6.0 — Release Checklist
 
 ## Before pushing to GitHub
 - [x] Package ID fixed: `org.orbispdf.app`
-- [x] versionName `6.0.0`
-- [x] versionCode `60000`
+- [x] versionName `6.0.7`
+- [x] versionCode `60007`
 - [x] English and Arabic catalogs have identical keys
 - [x] English catalog contains no Arabic characters
 - [x] Arabic catalog has no untranslated Latin UI words (file-extension patterns excluded)
@@ -15,7 +15,7 @@
 - [x] Play release signing workflow is manual and secrets are not committed
 
 ## After first GitHub push
-- [ ] Confirm **Orbis PDF CI** is green on the actual GitHub hosted runners.
+- [ ] Confirm **MaenPDF CI** is green on the actual GitHub hosted runners.
 - [ ] Download and smoke-test Windows artifact.
 - [ ] Install APK on at least one API 28-class device/emulator and one current Android device.
 - [ ] Open/save a cross-reader PDF corpus and compare output.

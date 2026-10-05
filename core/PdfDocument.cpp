@@ -320,7 +320,7 @@ bool PdfDocument::exportPdf(const QString &localPath, int onlyPage) {
     QPdfWriter writer(localPath);
     writer.setResolution(144);
     writer.setTitle(title());
-    writer.setCreator(QStringLiteral("Orbis PDF Professional"));
+    writer.setCreator(QStringLiteral("MaenPDF"));
     writer.setPageSize(QPageSize(m_pages.page(firstIndex)->points, QPageSize::Point, QStringLiteral("PDF page")));
     QPainter painter(&writer);
     if (!painter.isActive()) {
@@ -371,7 +371,7 @@ bool PdfDocument::atomicExportPdf(const QString &target) {
     }
 
     const bool existed = QFile::exists(target);
-    const QString backup = target + QStringLiteral(".orbis-backup");
+    const QString backup = target + QStringLiteral(".maenpdf-backup");
     if (existed) {
         QFile::remove(backup);
         if (!QFile::rename(target, backup)) {
@@ -414,7 +414,7 @@ bool PdfDocument::exportToDestination(const QString &destination, int onlyPage, 
     }
 
     QTemporaryFile temporary(QDir(QStandardPaths::writableLocation(QStandardPaths::TempLocation))
-                                 .filePath(QStringLiteral("orbis-output-XXXXXX.pdf")));
+                                 .filePath(QStringLiteral("maenpdf-output-XXXXXX.pdf")));
     temporary.setAutoRemove(false);
     if (!temporary.open()) {
         emit errorOccurred(QStringLiteral("error.content_write"), {});
@@ -582,7 +582,7 @@ bool PdfDocument::protectCopy(const QString &outputPath, const QString &user, co
     }
 
     QTemporaryFile input(QDir(QStandardPaths::writableLocation(QStandardPaths::TempLocation))
-                             .filePath(QStringLiteral("orbis-security-input-XXXXXX.pdf")));
+                             .filePath(QStringLiteral("maenpdf-security-input-XXXXXX.pdf")));
     input.setAutoRemove(false);
     if (!input.open()) {
         emit errorOccurred(QStringLiteral("error.secure_temp"), {});
@@ -597,7 +597,7 @@ bool PdfDocument::protectCopy(const QString &outputPath, const QString &user, co
     }
 
     QTemporaryFile encrypted(QDir(QStandardPaths::writableLocation(QStandardPaths::TempLocation))
-                                 .filePath(QStringLiteral("orbis-security-output-XXXXXX.pdf")));
+                                 .filePath(QStringLiteral("maenpdf-security-output-XXXXXX.pdf")));
     encrypted.setAutoRemove(false);
     if (!encrypted.open()) {
         QFile::remove(inputPath);
@@ -659,7 +659,7 @@ bool PdfDocument::protectCopy(const QString &outputPath, const QString &user, co
                                               + QUuid::createUuid().toString(QUuid::WithoutBraces) + QStringLiteral(".secure.tmp.pdf"));
             QFile::remove(temp);
             if (QFile::copy(encryptedPath, temp)) {
-                const QString backup = destination + QStringLiteral(".orbis-backup");
+                const QString backup = destination + QStringLiteral(".maenpdf-backup");
                 const bool existed = QFile::exists(destination);
                 if (existed) { QFile::remove(backup); copied = QFile::rename(destination, backup); }
                 else copied = true;

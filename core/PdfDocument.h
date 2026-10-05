@@ -42,7 +42,7 @@ public:
     bool canRedo() const { return m_undo.canRedo(); }
     bool hasPageClipboard() const { return m_hasClipboard; }
     bool recoveryAvailable() const { return m_recoveryAvailable; }
-    QString engineName() const { return QStringLiteral("Orbis Engine 6"); }
+    QString engineName() const { return QStringLiteral("MaenPDF Engine 6"); }
 
     Q_INVOKABLE bool newDocument();
     Q_INVOKABLE bool openDocument(const QString &path);

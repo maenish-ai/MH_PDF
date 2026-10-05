@@ -12,11 +12,11 @@ int main(int argc, char *argv[]) {
     QGuiApplication app(argc, argv);
     AppLogger::install();
 
-    QGuiApplication::setOrganizationName(QStringLiteral("OrbisPDF"));
-    QGuiApplication::setOrganizationDomain(QStringLiteral("orbispdf.org"));
-    QGuiApplication::setApplicationName(QStringLiteral("Orbis PDF Professional"));
-    QGuiApplication::setApplicationVersion(QStringLiteral("6.0.0"));
-    QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/qt/qml/PDFStudio/assets/orbis-pdf-logo.svg")));
+    QGuiApplication::setOrganizationName(QStringLiteral("MaenPDF"));
+    QGuiApplication::setOrganizationDomain(QStringLiteral("maenpdf.local"));
+    QGuiApplication::setApplicationName(QStringLiteral("MaenPDF"));
+    QGuiApplication::setApplicationVersion(QStringLiteral("6.0.7"));
+    QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/qt/qml/PDFStudio/assets/maenpdf-logo.svg")));
 
     LanguageManager languageManager;
     PdfDocument document;
@@ -24,7 +24,7 @@ int main(int argc, char *argv[]) {
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("pdfDocument"), &document);
     engine.rootContext()->setContextProperty(QStringLiteral("i18n"), &languageManager);
-    engine.addImageProvider(QStringLiteral("orbis"), new PageImageProvider(document.pageModel()));
+    engine.addImageProvider(QStringLiteral("maenpdf"), new PageImageProvider(document.pageModel()));
     engine.loadFromModule(QStringLiteral("PDFStudio"), QStringLiteral("Main"));
     if (engine.rootObjects().isEmpty())
         return -1;

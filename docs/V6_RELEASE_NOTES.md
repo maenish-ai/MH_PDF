@@ -1,4 +1,4 @@
-# Orbis PDF Professional 6.0 — Engineering Release
+# MaenPDF 6.0 — Engineering Release
 
 - Added complete EN/AR catalog architecture and RTL switching.
 - Added localization release gate to prevent mixed-language interface regressions.

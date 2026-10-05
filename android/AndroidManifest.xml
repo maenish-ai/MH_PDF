@@ -20,7 +20,7 @@
         android:allowBackup="true"
         android:fullBackupOnly="false"
         android:hardwareAccelerated="true"
-        android:icon="@drawable/orbis_pdf_icon"
+        android:icon="@drawable/maenpdf_icon"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">

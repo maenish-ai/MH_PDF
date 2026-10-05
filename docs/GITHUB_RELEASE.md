@@ -1,7 +1,7 @@
-# GitHub and Store Release Guide — Orbis PDF 6
+# GitHub and Store Release Guide — MaenPDF 6
 
 ## Repository layout
-Upload the **contents** of the Orbis PDF folder to the repository root, including `.github/`.
+Upload the **contents** of the MaenPDF folder to the repository root, including `.github/`.
 
 ## Continuous integration
 Every push to `main` or `develop`, and every pull request, runs:
@@ -16,8 +16,8 @@ The build jobs depend on the audit job, so packaging cannot start when a release
 
 ## Stable Android identity
 - Package ID: `org.orbispdf.app`
-- v6 versionName: `6.0.0`
-- v6 versionCode: `60000`
+- v6 versionName: `6.0.7`
+- v6 versionCode: `60007`
 - minSdk: 28
 - target/compile SDK: 36
 
@@ -30,7 +30,7 @@ CI intentionally produces unsigned validation artifacts. Do not commit keystores
 The modern v6 line is tested/configured for Windows 10/11 and Android API 28+. Windows 7/8 and Android below API 28 require separately maintained legacy toolchains and should not be advertised as supported until their own CI/regression matrix exists.
 
 ## First GitHub run
-A local audit cannot prove the behavior of a hosted runner. After the first push, open **Actions → Orbis PDF CI** and confirm all jobs are green. If a runner/provider changes upstream, use the failing GitHub log as the source of truth rather than weakening the audits.
+A local audit cannot prove the behavior of a hosted runner. After the first push, open **Actions → MaenPDF CI** and confirm all jobs are green. If a runner/provider changes upstream, use the failing GitHub log as the source of truth rather than weakening the audits.
 
 ## Play signing workflow
 `.github/workflows/play-release.yml` is manual-only. Before using it, create these GitHub Actions secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEY_ALIAS`, `ANDROID_KEYSTORE_PASSWORD`, and `ANDROID_KEY_PASSWORD`. The workflow decodes the upload keystore only inside the hosted runner and uses Qt's `QT_ANDROID_SIGN_AAB`/`QT_ANDROID_SIGN_APK` signing path.

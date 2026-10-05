@@ -1,4 +1,4 @@
-name: Orbis PDF CI
+name: MaenPDF CI
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: orbis-${{ github.workflow }}-${{ github.ref }}
+  group: maenpdf-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -66,15 +66,74 @@ jobs:
         run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR"
       - name: Build
         run: cmake --build build --config Release --parallel
-      - name: Deploy Qt runtime
+      - name: Deploy complete Qt runtime
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
-          Copy-Item build/Release/OrbisPDF.exe dist/
-          & "$env:QT_ROOT_DIR\bin\windeployqt.exe" --release --qmldir ui --no-translations dist/OrbisPDF.exe
+          Copy-Item build/Release/MaenPDF.exe dist/
+          & "$env:QT_ROOT_DIR\bin\windeployqt.exe" `
+            --release `
+            --force `
+            --compiler-runtime `
+            --qmldir "$PWD\ui" `
+            --no-translations `
+            "dist\MaenPDF.exe"
+          if ($LASTEXITCODE -ne 0) { throw "windeployqt failed with exit code $LASTEXITCODE" }
+          if (!(Test-Path "dist\platforms\qwindows.dll")) { throw "Qt Windows platform plugin is missing" }
+          if (!(Test-Path "dist\Qt6Pdf.dll")) { throw "Qt PDF runtime is missing" }
+
+      - name: Smoke test portable MaenPDF executable
+        shell: pwsh
+        run: |
+          $env:QT_QPA_PLATFORM = "offscreen"
+          $env:QT_QUICK_BACKEND = "software"
+          $proc = Start-Process -FilePath "$PWD\dist\MaenPDF.exe" -WorkingDirectory "$PWD\dist" -PassThru
+          Start-Sleep -Seconds 6
+          if ($proc.HasExited) {
+            throw "MaenPDF.exe exited during startup smoke test with code $($proc.ExitCode)"
+          }
+          Stop-Process -Id $proc.Id -Force
+
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (!(Test-Path $iscc)) {
+            $cmd = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+            if ($null -eq $cmd) { throw "Inno Setup compiler not found" }
+            $iscc = $cmd.Source
+          }
+          & $iscc "installer\MaenPDF.iss"
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+          if (!(Test-Path "installer-output\MaenPDF-Setup.exe")) { throw "MaenPDF-Setup.exe was not produced" }
+
+      - name: Smoke test installed MaenPDF
+        shell: pwsh
+        run: |
+          $setup = (Resolve-Path "installer-output\MaenPDF-Setup.exe").Path
+          $installDir = "$env:RUNNER_TEMP\MaenPDF-Smoke"
+          $args = @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$installDir")
+          $installer = Start-Process -FilePath $setup -ArgumentList $args -Wait -PassThru
+          if ($installer.ExitCode -ne 0) { throw "MaenPDF installer smoke test failed with code $($installer.ExitCode)" }
+          $installedExe = Join-Path $installDir 'MaenPDF.exe'
+          if (!(Test-Path $installedExe)) { throw "Installed MaenPDF.exe is missing" }
+          $env:QT_QPA_PLATFORM = "offscreen"
+          $env:QT_QUICK_BACKEND = "software"
+          $proc = Start-Process -FilePath $installedExe -WorkingDirectory $installDir -PassThru
+          Start-Sleep -Seconds 6
+          if ($proc.HasExited) { throw "Installed MaenPDF exited during smoke test with code $($proc.ExitCode)" }
+          Stop-Process -Id $proc.Id -Force
+
       - uses: actions/upload-artifact@v7.0.1
         with:
-          name: OrbisPDF-Windows10-11-x64
+          name: MaenPDF-Windows-Setup
+          path: installer-output/MaenPDF-Setup.exe
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: MaenPDF-Windows-Portable
           path: dist/
           if-no-files-found: error
 
@@ -120,8 +179,24 @@ jobs:
           test -f "$RUNNER_TEMP/Qt/${QT_VERSION}/gcc_64/lib/cmake/Qt6/Qt6Config.cmake"
           test -f "$RUNNER_TEMP/Qt/${QT_VERSION}/android_arm64_v8a/lib/cmake/Qt6Pdf/Qt6PdfConfig.cmake"
           test -f "$RUNNER_TEMP/Qt/${QT_VERSION}/android_armv7/lib/cmake/Qt6Pdf/Qt6PdfConfig.cmake"
-      - name: Configure Android multi-ABI
+      - name: Create ephemeral CI test signing key
         shell: bash
+        run: |
+          keytool -genkeypair \
+            -keystore "$RUNNER_TEMP/maenpdf-ci-test.jks" \
+            -storepass maenpdf-ci-test \
+            -alias maenpdf-ci-test \
+            -keypass maenpdf-ci-test \
+            -keyalg RSA -keysize 2048 -validity 3650 \
+            -dname "CN=MaenPDF CI Test, OU=Development, O=MaenPDF, L=Amman, ST=Amman, C=JO"
+
+      - name: Configure Android multi-ABI with installable test APK signing
+        shell: bash
+        env:
+          QT_ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/maenpdf-ci-test.jks
+          QT_ANDROID_KEYSTORE_ALIAS: maenpdf-ci-test
+          QT_ANDROID_KEYSTORE_STORE_PASS: maenpdf-ci-test
+          QT_ANDROID_KEYSTORE_KEY_PASS: maenpdf-ci-test
         run: |
           "$RUNNER_TEMP/Qt/${QT_VERSION}/android_arm64_v8a/bin/qt-cmake" \
             -S . -B build-android -GNinja \
@@ -130,20 +205,52 @@ jobs:
             -DANDROID_SDK_ROOT="$ANDROID_SDK_ROOT" \
             -DANDROID_NDK_ROOT="$ANDROID_SDK_ROOT/ndk/${ANDROID_NDK}" \
             -DQT_HOST_PATH="$RUNNER_TEMP/Qt/${QT_VERSION}/gcc_64" \
-            -DQT_ANDROID_BUILD_ALL_ABIS=TRUE
-      - name: Build APK
+            -DQT_ANDROID_BUILD_ALL_ABIS=TRUE \
+            -DQT_ANDROID_SIGN_APK=ON
+
+      - name: Build signed test APK
+        env:
+          QT_ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/maenpdf-ci-test.jks
+          QT_ANDROID_KEYSTORE_ALIAS: maenpdf-ci-test
+          QT_ANDROID_KEYSTORE_STORE_PASS: maenpdf-ci-test
+          QT_ANDROID_KEYSTORE_KEY_PASS: maenpdf-ci-test
         run: cmake --build build-android --target apk --parallel
-      - name: Build AAB
+
+      - name: Build unsigned AAB for validation
         run: cmake --build build-android --target aab --parallel
-      - name: Collect Android artifacts
+
+      - name: Verify and collect Android artifacts
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p dist-android
-          find build-android -type f \( -name '*.apk' -o -name '*.aab' \) -exec cp -v {} dist-android/ \;
-          test -n "$(find dist-android -type f -name '*.apk' -print -quit)"
-          test -n "$(find dist-android -type f -name '*.aab' -print -quit)"
+
+          signed_apk=""
+          while IFS= read -r apk; do
+            if "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner" verify "$apk" >/dev/null 2>&1; then
+              signed_apk="$apk"
+              break
+            fi
+          done < <(find build-android -type f -name '*.apk' -print)
+
+          if [ -z "$signed_apk" ]; then
+            echo "No cryptographically signed APK was produced." >&2
+            find build-android -type f -name '*.apk' -print >&2
+            exit 1
+          fi
+
+          "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$signed_apk"
+          cp -v "$signed_apk" dist-android/MaenPDF-Installable-Test.apk
+
+          aab="$(find build-android -type f -name '*.aab' -print -quit)"
+          if [ -z "$aab" ]; then
+            echo "AAB was not produced." >&2
+            exit 1
+          fi
+          cp -v "$aab" dist-android/MaenPDF-Unsigned-For-Play-Validation.aab
+
       - uses: actions/upload-artifact@v7.0.1
         with:
-          name: OrbisPDF-Android-unsigned
+          name: MaenPDF-Android-Installable-Test
           path: dist-android/
           if-no-files-found: error

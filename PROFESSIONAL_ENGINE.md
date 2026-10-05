@@ -1,4 +1,4 @@
-# Orbis PDF Professional Engine 6
+# MaenPDF Engine 6
 
 ## Implemented
 - Replaceable `IPdfBackend` reader boundary with Qt PDF backend.

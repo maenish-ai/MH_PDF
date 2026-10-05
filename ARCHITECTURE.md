@@ -1,4 +1,4 @@
-# Orbis PDF Professional 6 — Architecture
+# MaenPDF 6 — Architecture
 
 ## Product rule
 A feature is presented as production-ready only when the active engine reports that capability and the release suite covers its principal failure modes. Unsupported Acrobat-class features stay disabled rather than being represented by placeholder controls.

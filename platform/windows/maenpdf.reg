@@ -1,0 +1,17 @@
+Windows Registry Editor Version 5.00
+
+; Optional per-user PDF association registration for MaenPDF.
+; Adjust the executable path if installed elsewhere. Windows may still ask the
+; user to choose the default PDF application, by design.
+
+[HKEY_CURRENT_USER\Software\Classes\MaenPDF.Document]
+@="MaenPDF Document"
+
+[HKEY_CURRENT_USER\Software\Classes\MaenPDF.Document\DefaultIcon]
+@="\"C:\\Program Files\\MaenPDF\\MaenPDF.exe\",0"
+
+[HKEY_CURRENT_USER\Software\Classes\MaenPDF.Document\shell\open\command]
+@="\"C:\\Program Files\\MaenPDF\\MaenPDF.exe\" \"%1\""
+
+[HKEY_CURRENT_USER\Software\Classes\.pdf\OpenWithProgids]
+"MaenPDF.Document"=hex(0):

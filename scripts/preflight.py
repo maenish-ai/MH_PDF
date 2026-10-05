@@ -8,4 +8,4 @@ for test in tests:
     result=subprocess.run([sys.executable,str(root/'tests'/test)],cwd=root)
     if result.returncode:
         raise SystemExit(result.returncode)
-print('\nAll Orbis PDF v6 local release gates passed.')
+print('\nAll MaenPDF v6 local release gates passed.')

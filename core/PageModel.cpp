@@ -102,7 +102,7 @@ QString PageModel::imageUrlForRow(int row) const {
     if (row < 0 || row >= m_pages.size())
         return {};
     const auto &page = m_pages[row];
-    return QStringLiteral("image://orbis/page/%1/%2/%3").arg(row).arg(page.revision).arg(page.uid);
+    return QStringLiteral("image://maenpdf/page/%1/%2/%3").arg(row).arg(page.revision).arg(page.uid);
 }
 
 QSize PageModel::defaultPixelSize(const PageItem &page) const {

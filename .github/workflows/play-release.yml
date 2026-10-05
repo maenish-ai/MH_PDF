@@ -1,4 +1,4 @@
-name: Orbis PDF Play Release
+name: MaenPDF Play Release
 
 on:
   workflow_dispatch:
@@ -57,10 +57,10 @@ jobs:
           test -n "$KEY_ALIAS"
           test -n "$STORE_PASS"
           test -n "$KEY_PASS"
-          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/orbis-upload.jks"
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/maenpdf-upload.jks"
       - name: Configure signed Android release
         env:
-          QT_ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/orbis-upload.jks
+          QT_ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/maenpdf-upload.jks
           QT_ANDROID_KEYSTORE_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           QT_ANDROID_KEYSTORE_STORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           QT_ANDROID_KEYSTORE_KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
@@ -77,7 +77,7 @@ jobs:
             -DQT_ANDROID_SIGN_APK=ON
       - name: Build signed AAB and APK
         env:
-          QT_ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/orbis-upload.jks
+          QT_ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/maenpdf-upload.jks
           QT_ANDROID_KEYSTORE_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           QT_ANDROID_KEYSTORE_STORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           QT_ANDROID_KEYSTORE_KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
@@ -91,6 +91,6 @@ jobs:
           test -n "$(find dist-play -type f -name '*.aab' -print -quit)"
       - uses: actions/upload-artifact@v7.0.1
         with:
-          name: OrbisPDF-Play-signed
+          name: MaenPDF-Play-signed
           path: dist-play/
           if-no-files-found: error
