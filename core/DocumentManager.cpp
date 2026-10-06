@@ -131,6 +131,28 @@ bool DocumentManager::closeTab(int index) {
     return true;
 }
 
+bool DocumentManager::closeOtherTabs(int keepIndex) {
+    if (keepIndex < 0 || keepIndex >= m_documents.size())
+        return false;
+    for (int i = 0; i < m_documents.size(); ++i) {
+        if (i != keepIndex && m_documents.at(i)->modified())
+            return false;
+    }
+    PdfDocument *keep = m_documents.at(keepIndex);
+    for (int i = m_documents.size() - 1; i >= 0; --i) {
+        if (i == keepIndex)
+            continue;
+        PdfDocument *victim = m_documents.takeAt(i);
+        victim->deleteLater();
+    }
+    m_currentIndex = m_documents.indexOf(keep);
+    emit tabsChanged();
+    emit currentIndexChanged();
+    emit currentDocumentChanged();
+    emit modifiedStateChanged();
+    return true;
+}
+
 void DocumentManager::setCurrentIndex(int index) {
     if (index < 0 || index >= m_documents.size() || index == m_currentIndex)
         return;

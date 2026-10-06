@@ -33,6 +33,7 @@ public:
     Q_INVOKABLE bool closeTab(int index);
     Q_INVOKABLE void setCurrentIndex(int index);
     Q_INVOKABLE bool closeCurrentTab() { return closeTab(m_currentIndex); }
+    Q_INVOKABLE bool closeOtherTabs(int keepIndex);
     Q_INVOKABLE void refreshMemoryPolicy();
 
     QImage renderPage(const QString &sessionId, int page, const QSize &requestedSize) const;

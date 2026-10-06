@@ -1,7 +1,7 @@
 from pathlib import Path
 import sys
 r=Path(__file__).resolve().parents[1]
-required=['core/IPdfBackend.h','core/QtPdfBackend.h','core/QtPdfBackend.cpp','core/MemoryPolicy.h','core/MemoryPolicy.cpp','core/DocumentManager.h','core/DocumentManager.cpp','core/SessionImageProvider.h','core/SessionImageProvider.cpp','core/PdfToolsService.h','core/PdfToolsService.cpp','core/AppSettings.h','core/AppSettings.cpp']
+required=['core/IPdfBackend.h','core/QtPdfBackend.h','core/QtPdfBackend.cpp','core/MemoryPolicy.h','core/MemoryPolicy.cpp','core/DocumentManager.h','core/DocumentManager.cpp','core/SessionImageProvider.h','core/SessionImageProvider.cpp','core/PdfToolsService.h','core/PdfToolsService.cpp','core/AppSettings.h','core/AppSettings.cpp','core/PrintService.h','core/PrintService.cpp']
 checks={f'file:{f}':(r/f).exists() for f in required}
 cpp=(r/'core/PdfDocument.cpp').read_text(encoding='utf-8')
 h=(r/'core/PdfDocument.h').read_text(encoding='utf-8')
@@ -17,6 +17,9 @@ checks.update({
  'cache bounded by memory policy':'MemoryPolicy::renderCacheBudgetBytes()' in pm,
  'session image provider':'image://maenpdf/%1/page/' in pm,
  'multi-document tabs':'m_documents' in dm and 'currentDocumentChanged' in dm,
+ 'close other tabs':'closeOtherTabs' in dm,
+ 'settings schema migration':'CurrentSettingsSchema' in (r/'core/AppSettings.h').read_text(encoding='utf-8') and 'migrateSettings' in (r/'core/AppSettings.cpp').read_text(encoding='utf-8'),
+ 'native print service':'QPrintDialog' in (r/'core/PrintService.cpp').read_text(encoding='utf-8') and 'QPrintPreviewDialog' in (r/'core/PrintService.cpp').read_text(encoding='utf-8'),
  'search API':'searchText' in h and 'pageText' in cpp,
  'Android content URI':'isContentUri' in cpp and 'prepareReadablePath' in cpp,
  'password open':'openDocumentWithPassword' in cpp and 'IncorrectPassword' in (r/'core/QtPdfBackend.cpp').read_text(encoding='utf-8'),

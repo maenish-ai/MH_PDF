@@ -82,6 +82,8 @@ $required = @(
     "Qt6Quick.dll",
     "Qt6QuickControls2.dll",
     "Qt6Pdf.dll",
+    "Qt6Widgets.dll",
+    "Qt6PrintSupport.dll",
     "msvcp140.dll",
     "vcruntime140.dll",
     "vcruntime140_1.dll"

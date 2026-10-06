@@ -38,6 +38,10 @@ checks={
  'Bates numbering implemented':'addBatesNumbers' in h and 'batesText' in (root/'core/PageModel.h').read_text(encoding='utf-8'),
  'multi-document session manager':'DocumentManager' in main and 'documentManager.currentDocument' in qml,
  'real desktop shortcut guard':'onClosing:' in qml and 'documentManager.hasModifiedDocuments' in qml,
+ 'professional menu surface':all(x in qml for x in ['menu.document','menu.comment','menu.forms','menu.convert','menu.window']),
+ 'print commands wired':'printService.printDocument' in qml and 'printService.printPreview' in qml,
+ 'command palette searchable':'dialog.command_search' in qml and 'commandSearch' in qml,
+ 'preferences settings schema':'settingsSchemaVersion' in qml and 'resetApplicationSettings' in qml,
 }
 for name,ok in checks.items(): print(('PASS' if ok else 'FAIL'),name)
 sys.exit(0 if all(checks.values()) else 1)

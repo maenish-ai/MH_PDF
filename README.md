@@ -1,60 +1,55 @@
-# MaenPDF 6.0
+# MaenPDF 7.1
 
-MaenPDF is an original, cross-platform PDF workspace written in C++17 with Qt/QML. Its identity, logo, colors and control layout are intentionally distinct from Adobe Acrobat while targeting the same broad class of PDF workflows.
+MaenPDF is a free, local-first, bilingual PDF workspace written in C++17 with Qt/QML. The project is designed around four goals: **fast, private, free and open**. Core document work happens on the user's device; MaenPDF does not require a cloud account or subscription.
 
-## v6 highlights
-- English and Arabic UI catalogs with persistent language choice.
-- English mode contains English interface text only; Arabic mode switches the application to RTL and uses an Arabic interface catalog.
-- Lazy, source-backed PDF pages: opening a large document no longer rasterizes every page up front.
-- Bounded LRU render cache and lower Android render limits for constrained devices.
-- Search in source PDF text, page thumbnails, zoom and navigation.
-- Create/open/save standard PDF, combine documents, extract pages, page insert/delete/duplicate/move/copy/paste/rotate.
-- Overlay editing: text, image, highlight and ink; watermark and page numbering.
-- Undo/redo for core document operations.
-- Safe verified save with rollback and periodic crash-recovery snapshots.
-- Android `content://` import/export support for document-picker workflows.
-- Optional desktop AES-256 protected export through `qpdf` when installed.
-- GitHub Actions quality gates followed by Windows 10/11 x64 and Android APK/AAB builds.
+## 7.1 Professional Foundation
+- Complete English/Arabic application catalogs with persistent language choice and automatic LTR/RTL layout.
+- Professional desktop menu surface: File, Edit, View, Document, Pages, Comment, Forms, Protect, Convert, Tools, Window, Language and Help.
+- Searchable `Ctrl+K` command palette.
+- Native desktop Print, Print Current Page and Print Preview through Qt Print Support and the operating-system printer dialog.
+- Clean Windows upgrades: the application directory is replaced on every update so obsolete Qt plugins/runtime DLLs cannot remain mixed with the new build.
+- One-time migration from pre-7.1 user state plus an explicit settings schema for future compatible upgrades.
+- Tabs, Recent Files, drag/drop, document properties, preferences, dark mode and low-memory mode.
+- Lazy, source-backed PDF pages and bounded LRU render cache so large PDFs are not rasterized into RAM up front.
+- Search in source PDF text, thumbnails, zoom, page navigation and recovery snapshots.
+- Create/open/save, combine, extract, insert/delete/duplicate/move/copy/paste/rotate/crop pages.
+- Overlay text, image, highlight, ink, signature image, watermark, page numbers and Bates numbering.
+- Safe flattened redaction, safe flattened export and visual PDF comparison.
+- Optional local qpdf tools for AES-256 protection, decrypt, optimize, linearize, repair and split.
+- Optional local Tesseract OCR (`eng+ara` by default) and optional LibreOffice conversion bridge.
+- Android `content://` import/export and signed CI test APK workflow.
+
+## Printing
+Windows builds include system printing. The File menu contains Print, Print Current Page and Print Preview. The native print dialog supplies installed printers, copies, ranges and printer-specific capabilities. Printing uses the same local page renderer as the viewer and does not upload the document.
+
+Android keeps the Print commands visible but disabled until a native Android Print Framework provider is integrated; this avoids pretending an unsupported path is complete.
+
+## Clean upgrade contract
+The installer uses the same stable AppId for updates. Before copying a new build it cleans the MaenPDF application directory, preventing files from an older runtime from surviving the update. The first 7.1+ installation also resets incompatible pre-7.1 application preferences/cache. Future 7.1+ updates preserve compatible preferences unless the user selects **Reset MaenPDF preferences and cache** during setup. User PDF documents are never stored in the application directory and are never deleted by this process.
 
 ## Build contract
 - CMake 3.21+
 - C++17
 - Qt 6.11.x with Qt PDF
-- CI pins Qt 6.11.2.
-- Android CI pins API 36, min API 28, JDK 21 and NDK 27.2.12479018.
+- Desktop: Qt Widgets + Qt Print Support for native printing
+- CI Qt: 6.11.2
+- Android: target API 36, minimum API 28, JDK 21, NDK 27.2.12479018
 
 ```bash
 cmake -S . -B build -DCMAKE_PREFIX_PATH=/path/to/Qt/6.11.2/<kit>
 cmake --build build --config Release
 ```
 
-Run the local release gates before pushing:
+Run all local release gates before pushing:
 
 ```bash
-python tests/source_audit.py
-python tests/localization_audit.py
-python tests/release_audit.py
-python tests/engine_v6_audit.py
+python scripts/preflight.py
 ```
 
-## GitHub
-Push the contents of this folder to the repository root. `.github/workflows/ci.yml` runs audits first, then Windows and Android builds. Build artifacts are uploaded by GitHub Actions.
-
-## Android identity and updates
-The package ID is `org.orbispdf.app`. It is retained internally for Android update continuity even though the visible product name is MaenPDF. After the first Play release, keep the package ID and signing key unchanged and increase `QT_ANDROID_VERSION_CODE` for every update. This allows Android to update the installed application without replacing it as a different app; application-private data remains under the same identity.
-
 ## Honest capability boundary
-v6 is not yet an Acrobat-equivalent structural PDF editor. Imported PDF pages remain source-backed for efficient viewing, while edits are rendered as overlays on export. True object-tree text/image editing, OCR, certificate-backed digital signatures, AcroForm authoring and true redaction remain disabled in the capability map until a suitable structural writer/provider and a regression corpus are integrated. No placeholder button is presented as if those features were complete.
+MaenPDF 7.1 is not yet a full object-tree PDF editor. Existing PDF text/image objects are not rewritten structurally, certificate-backed digital signatures and AcroForm authoring remain disabled, and those menu entries are deliberately unavailable rather than presented as completed features. The architecture keeps these capabilities behind explicit engine/provider boundaries for future development.
 
-## Community direction
-The intended public release can remain free for community use. Donation links should be optional and should only be added after official, verified donation destinations are selected. Donations must not unlock core PDF functionality.
+## Privacy and community
+Documents are processed locally. Optional qpdf, Tesseract and LibreOffice providers are discovered at runtime and are not bundled into the lightweight core. Donation support is optional and does not unlock core functionality.
 
-### Android test install
-GitHub CI publishes `MaenPDF-Installable-Test.apk` inside the `MaenPDF-Android-Installable-Test` artifact. That APK is signed with a CI-only test key and verified with `apksigner`, so it can be installed directly on a compatible Android device. Do not try to install the `.aab` directly; use the Play release workflow for production signing and distribution.
-
-
-## Windows installer
-
-The Windows CI job produces `MaenPDF-Windows-Setup`, containing a single `MaenPDF-Setup.exe`. The workflow deploys the Qt runtime with `windeployqt`, then explicitly bundles the complete VC143 C++ runtime discovered through Visual Studio `vswhere` so the installed application does not depend on a preinstalled Microsoft Visual C++ Redistributable. It validates the required Windows platform and Qt PDF DLLs, launches the portable executable through the native Windows platform, builds the Inno Setup installer, installs it silently into a clean test directory, validates the generated desktop shortcut, and launches the application from that shortcut. MaenPDF defaults to Qt Quick software rendering and the Basic Controls style on Windows to favor compatibility. The setup creates Start Menu and optional Desktop shortcuts named **MaenPDF**. If a Windows build or startup gate fails, the workflow also uploads `MaenPDF-Windows-Diagnostics` with the runtime inventory and startup log when available.
-
-For normal use, download the **MaenPDF-Windows-Setup** artifact and run `MaenPDF-Setup.exe`; do not copy only the portable EXE away from its Qt runtime folder.
+Code is licensed under GPL-3.0-or-later. Use of the MaenPDF name and logo is governed separately by `BRAND_POLICY.md`.

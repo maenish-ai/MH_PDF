@@ -1,59 +1,38 @@
-# MaenPDF 6.0 — Build Status
+# MaenPDF 7.1.0 — Build Status
 
-Local release gates in this source bundle pass:
+## Local verification
+All source-level release gates in this bundle pass:
 - source/reliability audit;
-- EN/AR localization audit;
-- packaging/release audit;
-- engine-v6 architecture audit;
-- JSON/XML/YAML syntax parsing.
-
-The current execution environment does not contain the Qt 6.11 SDK, so a native Windows/Android compilation cannot be truthfully certified here. GitHub Actions is therefore the authoritative compile/package gate after upload. The workflows pin the required toolchain and will stop before packaging if an audit fails.
+- EN/AR localization parity audit;
+- release/packaging audit;
+- engine v7 architecture audit;
+- security audit;
+- performance audit;
+- open-source/brand audit;
+- JSON, XML and GitHub Actions YAML parsing.
 
 Run locally before every push:
 
 ```bash
 python scripts/preflight.py
 ```
-## GitHub Actions run #3 diagnosis (2026-10-04)
 
-The third hosted build confirmed that the Windows generator/toolchain is now correct (MSVC 2022) and QtPdf installs successfully. Two later blockers were identified and fixed in this bundle:
+## Native build authority
+This working environment does not contain the full Qt 6.11 desktop/Android SDK, so the GitHub Actions workflow remains the authoritative native compilation, packaging and runtime smoke-test gate.
 
-- Windows: `QPdfDocument::render()` and `getAllText()` are non-const in Qt 6.11. The backend now keeps the document `mutable` so logically read-only backend operations can use Qt's internal caches without discarding the const backend API.
-- Android: Qt cross-compilation now passes `QT_HOST_PATH` to the host desktop Qt installed by `aqt --autodesktop`, and validates that host Qt before CMake configure.
+## Proven baseline
+GitHub Run #11 was fully green for MaenPDF 6.0.11. Run #12 for MaenPDF 7.0.0 proved Source Audit and Android green, and exposed a Windows QML startup property error. The 7.0.1 stabilization removed that error and added a real PDF-open smoke test so lazy QML delegates are instantiated during CI.
 
-These fixes are also guarded by the source/release audits. The next GitHub Actions run remains the authoritative native compile/package check.
+## 7.1.0 Professional Foundation changes
+- Windows installer now performs a clean application-directory replacement on every update, preventing obsolete DLLs/plugins from surviving an upgrade.
+- A one-time settings-generation migration clears incompatible pre-7.1 application state without touching user PDF documents.
+- Future 7.1+ installs preserve compatible settings unless the user chooses the installer reset task.
+- Qt desktop builds now link Qt Widgets and Qt Print Support and expose Print, Print Current Page and Print Preview.
+- `windeployqt` packaging explicitly validates `Qt6Widgets.dll` and `Qt6PrintSupport.dll` in addition to the existing Qt PDF and VC143 runtime checks.
+- CI installer smoke testing now simulates stale legacy settings and an obsolete application file and verifies that both are removed by the clean-upgrade path.
+- The desktop menu surface now includes File, Edit, View, Document, Pages, Comment, Forms, Protect, Convert, Tools, Window, Language and Help.
+- Ctrl+K command palette is searchable.
+- Settings use an explicit schema version.
 
-
-## GitHub Actions Run #4 follow-up
-
-- Windows 10/11 x64: configure, compile, Qt deployment, and artifact upload all passed on GitHub-hosted Windows 2022.
-- Android reached Qt/CMake configuration successfully with the host Qt path resolved.
-- The remaining Android configure failure was CMake rejecting the desktop-only install rule because the Android executable target is a module library.
-- v6.0.4 changes the install rule to provide an explicit Android `LIBRARY DESTINATION`, while retaining normal desktop runtime/bundle destinations.
-
-- GitHub Actions runtime hygiene: checkout v7.0.1, setup-python v7.0.0, setup-android v4.0.4, and upload-artifact v7.0.1 all use Node.js 24, eliminating the Node.js 20 deprecation annotations.
-
-### Android direct-install artifact
-The standard CI workflow now generates a release-mode `MaenPDF-Installable-Test.apk` signed with an ephemeral CI-only key, verifies it with Android `apksigner`, and uploads it in the `MaenPDF-Android-Installable-Test` artifact. This fixes the previous situation where CI exposed only an unsigned release APK that Android refused to install. The AAB remains non-installable directly and is for bundle validation only; production Play signing remains isolated in `play-release.yml` with persistent secrets.
-
-## GitHub Actions Run #7 — v6.0.8 fix
-
-Run #7 confirmed that the complete Windows pipeline is healthy: MSVC build, Qt runtime deployment, portable startup smoke test, Inno Setup installer creation, installed-app smoke test, and both Windows artifact uploads all passed.
-
-Android also compiled both ABIs and successfully produced a cryptographically signed release APK. `apksigner` verified one signer using APK Signature Scheme v3. The failure occurred only afterward: invoking Qt's `aab` target regenerated the Android output directory and the final collection step could then see only an unsigned APK intermediate. v6.0.8 fixes the workflow ordering by verifying and copying the signed APK to `dist-android/MaenPDF-Installable-Test.apk` immediately after the APK target, before the AAB target runs. The AAB is collected separately afterward.
-
-## Windows startup hardening — v6.0.9
-A real-device report showed that the installed Windows shortcut could appear to do nothing even though the previous CI smoke test passed. The previous Windows smoke test forced `QT_QPA_PLATFORM=offscreen` and `QT_QUICK_BACKEND=software`, so it did not exercise the normal `qwindows` startup path. v6.0.9 corrects the test strategy and hardens runtime startup: MaenPDF defaults to Qt Quick's software backend on Windows for compatibility with problematic GPU drivers, normalizes the working directory to the executable directory, shows a native startup error dialog if QML cannot create the main window, and logs startup diagnostics. CI now verifies the deployed Qt/MSVC runtime, starts the portable build through the native Windows platform, installs the setup with a desktop shortcut, validates the shortcut target/working directory, and launches MaenPDF from that shortcut.
-
-
-## Windows runtime stabilization — v6.0.10
-GitHub Actions Run #9 confirmed that source audit, Android APK/AAB, Windows configure, and Windows compilation all succeeded. The sole failure occurred in runtime deployment because `windeployqt --compiler-runtime` did not copy `msvcp140.dll` when `VCINSTALLDIR` was not exported by the runner shell. v6.0.10 packages the complete VC143 CRT explicitly via `vswhere`, validates `msvcp140.dll`, `vcruntime140.dll`, and `vcruntime140_1.dll`, pins Qt Quick to the software renderer and Basic Controls style on Windows, initializes the application identity before logging, verifies the QML main window from the startup log, and always preserves Windows diagnostics.
-
-## Windows QML startup correction — v6.0.11
-GitHub Actions Run #10 proved that source audit, Android APK/AAB, Windows compilation, Qt deployment, and VC143 runtime bundling all succeeded. The native Windows startup smoke test then exposed the real UI failure: `ui/Main.qml` assigned `letterSpacing` directly on a `Label`, which Qt 6.11 rejects at runtime. v6.0.11 changes this to the valid grouped property `font.letterSpacing`, adds a source audit preventing direct `letterSpacing:` assignments, and keeps the native portable/installed-shortcut startup gates enabled.
-
-## v7.0.1 Windows runtime stabilization
-- GitHub Run #12 proved Source Audit and Android green; only Windows native startup failed.
-- Root cause: `Main.qml` used `topPadding` on `ColumnLayout`, which is not a valid property.
-- A second latent `bottomPadding` misuse on a thumbnail `Label` was removed proactively.
-- CI now includes a real PDF-open smoke test so lazy/delegate QML is instantiated and checked for runtime property errors.
+## Android
+The standard CI workflow continues to produce `MaenPDF-Installable-Test.apk` with an ephemeral CI-only signing key and verifies it with `apksigner`. The AAB remains a validation artifact; production Play signing stays isolated in `.github/workflows/play-release.yml` with persistent secrets.

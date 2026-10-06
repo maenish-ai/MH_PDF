@@ -165,6 +165,12 @@ jobs:
           $setup = (Resolve-Path "installer-output\MaenPDF-Setup.exe").Path
           $installDir = "$env:RUNNER_TEMP\MaenPDF-Smoke"
           $args = @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$installDir",'/TASKS=desktopicon')
+
+          # Simulate stale pre-7.1 settings. The first 7.1+ install must remove
+          # incompatible application state while never touching user PDFs.
+          New-Item -Path 'HKCU:\Software\MaenPDF\MaenPDF' -Force | Out-Null
+          New-ItemProperty -Path 'HKCU:\Software\MaenPDF\MaenPDF' -Name 'LegacyProbe' -Value 'stale' -PropertyType String -Force | Out-Null
+
           $installer = Start-Process -FilePath $setup -ArgumentList $args -Wait -PassThru
           if ($installer.ExitCode -ne 0) { throw "MaenPDF installer smoke test failed with code $($installer.ExitCode)" }
 
@@ -172,7 +178,21 @@ jobs:
           if (!(Test-Path $installedExe)) { throw "Installed MaenPDF.exe is missing" }
           if (!(Test-Path (Join-Path $installDir 'platforms\qwindows.dll'))) { throw "Installed qwindows.dll is missing" }
           if (!(Test-Path (Join-Path $installDir 'Qt6Pdf.dll'))) { throw "Installed Qt6Pdf.dll is missing" }
+          if (!(Test-Path (Join-Path $installDir 'Qt6Widgets.dll'))) { throw "Installed Qt6Widgets.dll is missing" }
+          if (!(Test-Path (Join-Path $installDir 'Qt6PrintSupport.dll'))) { throw "Installed Qt6PrintSupport.dll is missing" }
           if (!(Test-Path (Join-Path $installDir 'msvcp140.dll'))) { throw "Installed MSVC runtime is missing" }
+          if (Test-Path 'HKCU:\Software\MaenPDF\MaenPDF' -PathType Container) {
+            $legacy = Get-ItemProperty -Path 'HKCU:\Software\MaenPDF\MaenPDF' -Name 'LegacyProbe' -ErrorAction SilentlyContinue
+            if ($null -ne $legacy) { throw "Pre-7.1 stale settings were not removed" }
+          }
+
+          # A normal update must replace the app directory completely, so an
+          # obsolete file from an older build cannot survive alongside new Qt
+          # plugins or runtimes.
+          Set-Content -Path (Join-Path $installDir 'stale-from-old-version.txt') -Value 'must disappear'
+          $reinstall = Start-Process -FilePath $setup -ArgumentList $args -Wait -PassThru
+          if ($reinstall.ExitCode -ne 0) { throw "MaenPDF clean-upgrade reinstall failed with code $($reinstall.ExitCode)" }
+          if (Test-Path (Join-Path $installDir 'stale-from-old-version.txt')) { throw "Obsolete application file survived the clean upgrade" }
 
           $desktopCandidates = @(
             (Join-Path ([Environment]::GetFolderPath('Desktop')) 'MaenPDF.lnk'),

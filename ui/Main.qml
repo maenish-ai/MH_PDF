@@ -30,6 +30,8 @@ ApplicationWindow {
     property string toolReport: ""
     property string pendingImagePath: ""
     property var providersState: pdfTools.providers
+    property bool showSidebar: true
+    property var documentProperties: ({})
 
     readonly property color panelColor: appSettings.darkMode ? "#1f2937" : "#ffffff"
     readonly property color subPanelColor: appSettings.darkMode ? "#18212f" : "#f8f9fb"
@@ -148,6 +150,12 @@ ApplicationWindow {
         function onOperationFinished(key, args) { showToast(key, args) }
         function onOperationFailed(key, args) { showToast(key, args) }
         function onProvidersChanged() { providersState = pdfTools.providers }
+    }
+
+    Connections {
+        target: printService
+        function onOperationFinished(key, args) { showToast(key, args) }
+        function onOperationFailed(key, args) { showToast(key, args) }
     }
 
     DropArea {
@@ -719,19 +727,99 @@ ApplicationWindow {
     }
 
     Dialog {
+        id: preferencesDlg
+        title: tx("dialog.preferences_title")
+        modal: true
+        standardButtons: Dialog.NoButton
+        width: 520
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 10
+            CheckBox {
+                text: tx("action.dark_mode")
+                checked: appSettings.darkMode
+                onToggled: appSettings.darkMode = checked
+            }
+            CheckBox {
+                text: tx("action.low_memory")
+                checked: appSettings.lowMemoryMode
+                onToggled: appSettings.lowMemoryMode = checked
+            }
+            Label {
+                text: tx("preferences.schema", [i18n.number(appSettings.settingsSchemaVersion)])
+                color: mutedColor
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+            RowLayout {
+                Button {
+                    text: tx("home.clear_recent")
+                    enabled: appSettings.recentFiles.length > 0
+                    onClicked: appSettings.clearRecentFiles()
+                }
+                Button {
+                    text: tx("action.reset_settings")
+                    onClicked: {
+                        appSettings.resetApplicationSettings(true)
+                        showToast("info.settings_reset", [])
+                    }
+                }
+            }
+        }
+        footer: DialogButtonBox {
+            Button { text: tx("dialog.close"); onClicked: preferencesDlg.close() }
+        }
+    }
+
+    Dialog {
+        id: propertiesDlg
+        title: tx("dialog.properties_title")
+        modal: true
+        standardButtons: Dialog.NoButton
+        width: 600
+        onOpened: documentProperties = pdfDocument ? pdfDocument.properties() : ({})
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 8
+            Label { text: tx("properties.name") + ": " + (documentProperties.title || ""); color: textColor; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+            Label { text: tx("properties.path") + ": " + (documentProperties.path || ""); color: mutedColor; wrapMode: Text.WrapAnywhere; Layout.fillWidth: true }
+            Label { text: tx("properties.pages") + ": " + i18n.number(documentProperties.pages || 0); color: textColor }
+            Label { text: tx("properties.size") + ": " + i18n.number(documentProperties.sizeBytes || 0) + " " + tx("properties.bytes"); color: textColor }
+            Label { text: tx("properties.format") + ": " + (documentProperties.format || ""); color: textColor }
+        }
+        footer: DialogButtonBox {
+            Button { text: tx("dialog.close"); onClicked: propertiesDlg.close() }
+        }
+    }
+
+    Dialog {
         id: commandDlg
         title: tx("dialog.command_title")
         modal: true
         standardButtons: Dialog.NoButton
+        width: 560
+        onOpened: {
+            commandSearch.clear()
+            commandSearch.forceActiveFocus()
+        }
         ColumnLayout {
             anchors.fill: parent
             spacing: 6
-            Button { text: tx("action.open"); Layout.fillWidth: true; onClicked: { commandDlg.close(); openDlg.open() } }
-            Button { text: tx("action.find"); Layout.fillWidth: true; onClicked: { commandDlg.close(); searchDlg.open() } }
-            Button { text: tx("action.compare"); Layout.fillWidth: true; enabled: pdfDocument.filePath !== ""; onClicked: { commandDlg.close(); compareDlg.open() } }
-            Button { text: tx("action.ocr"); Layout.fillWidth: true; enabled: providersState.qpdf && providersState.tesseract && pdfDocument.filePath !== ""; onClicked: { commandDlg.close(); ocrDlg.open() } }
-            Button { text: tx("action.safe_flatten"); Layout.fillWidth: true; enabled: pdfDocument.filePath !== ""; onClicked: { commandDlg.close(); toolOutputDlg.operation = "safeFlatten"; toolOutputDlg.open() } }
-            Button { text: tx("action.privacy"); Layout.fillWidth: true; onClicked: { commandDlg.close(); privacyDlg.open() } }
+            TextField {
+                id: commandSearch
+                placeholderText: tx("dialog.command_search")
+                Layout.fillWidth: true
+            }
+            Button { text: tx("action.open"); Layout.fillWidth: true; visible: commandSearch.text === "" || text.toLowerCase().indexOf(commandSearch.text.toLowerCase()) >= 0; onClicked: { commandDlg.close(); openDlg.open() } }
+            Button { text: tx("action.save"); Layout.fillWidth: true; visible: commandSearch.text === "" || text.toLowerCase().indexOf(commandSearch.text.toLowerCase()) >= 0; onClicked: { commandDlg.close(); pdfDocument.filePath === "" ? saveDlg.open() : pdfDocument.save() } }
+            Button { text: tx("action.print"); Layout.fillWidth: true; enabled: printService.available; visible: commandSearch.text === "" || text.toLowerCase().indexOf(commandSearch.text.toLowerCase()) >= 0; onClicked: { commandDlg.close(); printService.printDocument(pdfDocument, false) } }
+            Button { text: tx("action.find"); Layout.fillWidth: true; visible: commandSearch.text === "" || text.toLowerCase().indexOf(commandSearch.text.toLowerCase()) >= 0; onClicked: { commandDlg.close(); searchDlg.open() } }
+            Button { text: tx("action.compare"); Layout.fillWidth: true; enabled: pdfDocument.filePath !== ""; visible: commandSearch.text === "" || text.toLowerCase().indexOf(commandSearch.text.toLowerCase()) >= 0; onClicked: { commandDlg.close(); compareDlg.open() } }
+            Button { text: tx("action.ocr"); Layout.fillWidth: true; enabled: providersState.qpdf && providersState.tesseract && pdfDocument.filePath !== ""; visible: commandSearch.text === "" || text.toLowerCase().indexOf(commandSearch.text.toLowerCase()) >= 0; onClicked: { commandDlg.close(); ocrDlg.open() } }
+            Button { text: tx("action.optimize"); Layout.fillWidth: true; enabled: providersState.qpdf && pdfDocument.filePath !== ""; visible: commandSearch.text === "" || text.toLowerCase().indexOf(commandSearch.text.toLowerCase()) >= 0; onClicked: { commandDlg.close(); toolOutputDlg.operation = "optimize"; toolOutputDlg.open() } }
+            Button { text: tx("action.safe_flatten"); Layout.fillWidth: true; enabled: pdfDocument.filePath !== ""; visible: commandSearch.text === "" || text.toLowerCase().indexOf(commandSearch.text.toLowerCase()) >= 0; onClicked: { commandDlg.close(); toolOutputDlg.operation = "safeFlatten"; toolOutputDlg.open() } }
+            Button { text: tx("action.preferences"); Layout.fillWidth: true; visible: commandSearch.text === "" || text.toLowerCase().indexOf(commandSearch.text.toLowerCase()) >= 0; onClicked: { commandDlg.close(); preferencesDlg.open() } }
+            Button { text: tx("action.privacy"); Layout.fillWidth: true; visible: commandSearch.text === "" || text.toLowerCase().indexOf(commandSearch.text.toLowerCase()) >= 0; onClicked: { commandDlg.close(); privacyDlg.open() } }
         }
         footer: DialogButtonBox { Button { text: tx("dialog.close"); onClicked: commandDlg.close() } }
     }
@@ -740,6 +828,7 @@ ApplicationWindow {
     Shortcut { sequences: [StandardKey.Open]; onActivated: openDlg.open() }
     Shortcut { sequences: [StandardKey.Save]; onActivated: pdfDocument.filePath === "" ? saveDlg.open() : pdfDocument.save() }
     Shortcut { sequences: [StandardKey.Find]; onActivated: searchDlg.open() }
+    Shortcut { sequences: [StandardKey.Print]; enabled: printService.available; onActivated: printService.printDocument(pdfDocument, false) }
     Shortcut { sequences: [StandardKey.Undo]; onActivated: if (pdfDocument.canUndo) pdfDocument.undo() }
     Shortcut { sequences: [StandardKey.Redo]; onActivated: if (pdfDocument.canRedo) pdfDocument.redo() }
     Shortcut { sequences: [StandardKey.Delete]; onActivated: pdfDocument.deletePage(pdfDocument.currentPage) }
@@ -763,36 +852,60 @@ ApplicationWindow {
             Action { text: tx("action.home"); onTriggered: homeVisible = true }
             Action { text: tx("action.new_tab"); onTriggered: { documentManager.newTab(); homeVisible = false } }
             Action { text: tx("action.open"); onTriggered: openDlg.open() }
-            Action { text: tx("action.combine"); onTriggered: appendDlg.open() }
+            Action { text: tx("action.combine"); enabled: !pdfDocument.locked; onTriggered: appendDlg.open() }
             MenuSeparator {}
             Action { text: tx("action.save"); onTriggered: pdfDocument.filePath === "" ? saveDlg.open() : pdfDocument.save() }
             Action { text: tx("action.save_as"); onTriggered: saveDlg.open() }
-            Action { text: tx("action.extract"); onTriggered: extractDlg.open() }
-            Action { text: tx("action.export_images"); enabled: pdfDocument.filePath !== ""; onTriggered: exportImagesDlg.open() }
+            Menu {
+                title: tx("action.export")
+                Action { text: tx("action.extract"); onTriggered: extractDlg.open() }
+                Action { text: tx("action.export_images"); enabled: pdfDocument.filePath !== ""; onTriggered: exportImagesDlg.open() }
+                Action { text: tx("action.safe_flatten"); enabled: pdfDocument.filePath !== ""; onTriggered: { toolOutputDlg.operation = "safeFlatten"; toolOutputDlg.open() } }
+            }
+            MenuSeparator {}
+            Action { text: tx("action.print"); enabled: printService.available; onTriggered: printService.printDocument(pdfDocument, false) }
+            Action { text: tx("action.print_current"); enabled: printService.available; onTriggered: printService.printDocument(pdfDocument, true) }
+            Action { text: tx("action.print_preview"); enabled: printService.available; onTriggered: printService.printPreview(pdfDocument, false) }
+            MenuSeparator {}
+            Action { text: tx("action.properties"); onTriggered: propertiesDlg.open() }
+            Action { text: tx("action.close_tab"); onTriggered: requestCloseTab(documentManager.currentIndex) }
+            Action { text: tx("action.exit"); onTriggered: win.close() }
         }
+
         Menu {
             title: tx("menu.edit")
-            Action { text: tx("action.find"); onTriggered: searchDlg.open() }
-            MenuSeparator {}
             Action { text: tx("action.undo"); enabled: pdfDocument.canUndo; onTriggered: pdfDocument.undo() }
             Action { text: tx("action.redo"); enabled: pdfDocument.canRedo; onTriggered: pdfDocument.redo() }
             MenuSeparator {}
             Action { text: tx("action.copy_page"); onTriggered: pdfDocument.copyPage(pdfDocument.currentPage) }
             Action { text: tx("action.paste_page"); enabled: pdfDocument.hasPageClipboard; onTriggered: pdfDocument.pastePage(pdfDocument.currentPage) }
+            Action { text: tx("action.delete"); enabled: pdfDocument.pageCount > 1; onTriggered: pdfDocument.deletePage(pdfDocument.currentPage) }
+            MenuSeparator {}
+            Action { text: tx("action.find"); onTriggered: searchDlg.open() }
+            Action { text: tx("action.preferences"); onTriggered: preferencesDlg.open() }
         }
+
         Menu {
-            title: tx("menu.pages")
-            Action { text: tx("action.add_blank"); onTriggered: pdfDocument.addBlankPage() }
-            Action { text: tx("action.duplicate"); onTriggered: pdfDocument.duplicatePage(pdfDocument.currentPage) }
-            Action { text: tx("action.rotate_clockwise"); onTriggered: pdfDocument.rotatePage(pdfDocument.currentPage, 90) }
-            Action { text: tx("action.crop"); onTriggered: { tool = "crop"; homeVisible = false } }
-            Action { text: tx("action.bates"); onTriggered: batesDlg.open() }
-            Action { text: tx("action.delete"); onTriggered: pdfDocument.deletePage(pdfDocument.currentPage) }
+            title: tx("menu.view")
+            Action { text: tx("action.zoom_in"); onTriggered: zoom = Math.min(3, zoom + 0.1) }
+            Action { text: tx("action.zoom_out"); onTriggered: zoom = Math.max(0.12, zoom - 0.1) }
+            Action { text: tx("action.actual_size"); onTriggered: zoom = 1.0 }
+            Action { text: tx("action.fit_width"); onTriggered: fitWidth() }
+            Action { text: tx("action.fit_page"); onTriggered: fitPage() }
+            MenuSeparator {}
+            Action { text: tx("action.sidebar"); checkable: true; checked: showSidebar; onTriggered: showSidebar = checked }
+            Action { text: tx("action.full_screen"); checkable: true; checked: win.visibility === Window.FullScreen; onTriggered: win.visibility = checked ? Window.FullScreen : Window.Windowed }
+            MenuSeparator {}
+            Action { text: tx("action.dark_mode"); checkable: true; checked: appSettings.darkMode; onTriggered: appSettings.darkMode = checked }
+            Action { text: tx("action.low_memory"); checkable: true; checked: appSettings.lowMemoryMode; onTriggered: appSettings.lowMemoryMode = checked }
         }
+
         Menu {
-            title: tx("menu.tools")
+            title: tx("menu.document")
+            Action { text: tx("action.combine"); enabled: !pdfDocument.locked; onTriggered: appendDlg.open() }
             Action { text: tx("action.compare"); enabled: pdfDocument.filePath !== ""; onTriggered: compareDlg.open() }
             Action { text: tx("action.ocr"); enabled: providersState.qpdf && providersState.tesseract && pdfDocument.filePath !== ""; onTriggered: ocrDlg.open() }
+            MenuSeparator {}
             Action { text: tx("action.optimize"); enabled: providersState.qpdf && pdfDocument.filePath !== ""; onTriggered: { toolOutputDlg.operation = "optimize"; toolOutputDlg.open() } }
             Action { text: tx("action.linearize"); enabled: providersState.qpdf && pdfDocument.filePath !== ""; onTriggered: { toolOutputDlg.operation = "linearize"; toolOutputDlg.open() } }
             Action { text: tx("action.repair"); enabled: providersState.qpdf && pdfDocument.filePath !== ""; onTriggered: { toolOutputDlg.operation = "repair"; toolOutputDlg.open() } }
@@ -804,35 +917,96 @@ ApplicationWindow {
                     reportDlg.open()
                 }
             }
-            Action { text: tx("action.split"); enabled: providersState.qpdf && pdfDocument.filePath !== ""; onTriggered: splitDlg.open() }
-            Action { text: tx("action.safe_flatten"); enabled: pdfDocument.filePath !== ""; onTriggered: { toolOutputDlg.operation = "safeFlatten"; toolOutputDlg.open() } }
-            MenuSeparator {}
-            Action { text: tx("action.image_to_pdf"); onTriggered: imageToPdfInputDlg.open() }
-            Action { text: tx("action.office_to_pdf"); enabled: providersState.libreOffice; onTriggered: officeInputDlg.open() }
-            Action { text: tx("action.providers"); onTriggered: providersDlg.open() }
+            Action { text: tx("action.properties"); onTriggered: propertiesDlg.open() }
         }
+
+        Menu {
+            title: tx("menu.pages")
+            Action { text: tx("action.add_blank"); enabled: !pdfDocument.locked; onTriggered: pdfDocument.addBlankPage() }
+            Action { text: tx("action.duplicate"); enabled: !pdfDocument.locked; onTriggered: pdfDocument.duplicatePage(pdfDocument.currentPage) }
+            Action { text: tx("action.move_page_up"); enabled: !pdfDocument.locked && pdfDocument.currentPage > 0; onTriggered: pdfDocument.movePage(pdfDocument.currentPage, pdfDocument.currentPage - 1) }
+            Action { text: tx("action.move_page_down"); enabled: !pdfDocument.locked && pdfDocument.currentPage < pdfDocument.pageCount - 1; onTriggered: pdfDocument.movePage(pdfDocument.currentPage, pdfDocument.currentPage + 1) }
+            Action { text: tx("action.rotate_clockwise"); enabled: !pdfDocument.locked; onTriggered: pdfDocument.rotatePage(pdfDocument.currentPage, 90) }
+            Action { text: tx("action.crop"); enabled: !pdfDocument.locked; onTriggered: { tool = "crop"; homeVisible = false } }
+            Action { text: tx("action.extract"); onTriggered: extractDlg.open() }
+            Action { text: tx("action.split"); enabled: providersState.qpdf && pdfDocument.filePath !== ""; onTriggered: splitDlg.open() }
+            MenuSeparator {}
+            Action { text: tx("action.add_page_numbers"); enabled: !pdfDocument.locked; onTriggered: pdfDocument.addPageNumbers() }
+            Action { text: tx("action.bates"); enabled: !pdfDocument.locked; onTriggered: batesDlg.open() }
+            Action { text: tx("action.delete"); enabled: !pdfDocument.locked && pdfDocument.pageCount > 1; onTriggered: pdfDocument.deletePage(pdfDocument.currentPage) }
+        }
+
+        Menu {
+            title: tx("menu.comment")
+            Action { text: tx("action.pointer"); onTriggered: tool = "select" }
+            Action { text: tx("action.edit_text"); enabled: !pdfDocument.locked; onTriggered: { tool = "text"; homeVisible = false } }
+            Action { text: tx("action.highlight"); enabled: !pdfDocument.locked; onTriggered: { tool = "highlight"; homeVisible = false } }
+            Action { text: tx("action.draw"); enabled: !pdfDocument.locked; onTriggered: { tool = "draw"; homeVisible = false } }
+            Action { text: tx("action.insert_image"); enabled: !pdfDocument.locked; onTriggered: imageDlg.open() }
+            Action { text: tx("action.signature"); enabled: !pdfDocument.locked; onTriggered: signatureDlg.open() }
+            MenuSeparator {}
+            Action { text: tx("action.watermark"); enabled: !pdfDocument.locked; onTriggered: watermarkDlg.open() }
+            Action { text: tx("action.add_page_numbers"); enabled: !pdfDocument.locked; onTriggered: pdfDocument.addPageNumbers() }
+        }
+
+        Menu {
+            title: tx("menu.forms")
+            Action { text: tx("action.form_fill"); enabled: false }
+            Action { text: tx("action.form_text_field"); enabled: false }
+            Action { text: tx("action.form_checkbox"); enabled: false }
+            Action { text: tx("action.form_radio"); enabled: false }
+            Action { text: tx("action.form_dropdown"); enabled: false }
+            MenuSeparator {}
+            Action { text: tx("action.feature_planned"); enabled: false }
+        }
+
         Menu {
             title: tx("menu.protect")
             Action { text: tx("action.password_permissions"); enabled: providersState.qpdf; onTriggered: securityDlg.open() }
             Action { text: tx("action.decrypt"); enabled: providersState.qpdf && pdfDocument.filePath !== ""; onTriggered: decryptDlg.open() }
-            Action { text: tx("action.redact"); onTriggered: { tool = "redact"; homeVisible = false } }
+            Action { text: tx("action.redact"); enabled: !pdfDocument.locked; onTriggered: { tool = "redact"; homeVisible = false } }
+            Action { text: tx("action.safe_flatten"); enabled: pdfDocument.filePath !== ""; onTriggered: { toolOutputDlg.operation = "safeFlatten"; toolOutputDlg.open() } }
             Action { text: tx("action.lock_session"); onTriggered: pdfDocument.setLocked(!pdfDocument.locked) }
+            MenuSeparator {}
+            Action { text: tx("action.digital_signature"); enabled: false }
         }
+
         Menu {
-            title: tx("menu.view")
-            Action { text: tx("action.fit_width"); onTriggered: fitWidth() }
-            Action { text: tx("action.fit_page"); onTriggered: fitPage() }
-            Action { text: tx("action.dark_mode"); checkable: true; checked: appSettings.darkMode; onTriggered: appSettings.darkMode = checked }
-            Action { text: tx("action.low_memory"); checkable: true; checked: appSettings.lowMemoryMode; onTriggered: appSettings.lowMemoryMode = checked }
+            title: tx("menu.convert")
+            Action { text: tx("action.export_images"); enabled: pdfDocument.filePath !== ""; onTriggered: exportImagesDlg.open() }
+            Action { text: tx("action.image_to_pdf"); onTriggered: imageToPdfInputDlg.open() }
+            Action { text: tx("action.office_to_pdf"); enabled: providersState.libreOffice; onTriggered: officeInputDlg.open() }
+            Action { text: tx("action.ocr"); enabled: providersState.qpdf && providersState.tesseract && pdfDocument.filePath !== ""; onTriggered: ocrDlg.open() }
         }
+
+        Menu {
+            title: tx("menu.tools")
+            Action { text: tx("action.command_palette"); onTriggered: commandDlg.open() }
+            Action { text: tx("action.providers"); onTriggered: providersDlg.open() }
+            Action { text: tx("action.compare"); enabled: pdfDocument.filePath !== ""; onTriggered: compareDlg.open() }
+            Action { text: tx("action.check"); enabled: providersState.qpdf && pdfDocument.filePath !== ""; onTriggered: { toolReport = pdfTools.checkPdf(pdfDocument.filePath); reportDlg.open() } }
+            Action { text: tx("action.batch_processing"); enabled: false }
+        }
+
+        Menu {
+            title: tx("menu.window")
+            Action { text: tx("action.next_tab"); enabled: documentManager.count > 1; onTriggered: documentManager.currentIndex = (documentManager.currentIndex + 1) % documentManager.count }
+            Action { text: tx("action.previous_tab"); enabled: documentManager.count > 1; onTriggered: documentManager.currentIndex = (documentManager.currentIndex - 1 + documentManager.count) % documentManager.count }
+            Action { text: tx("action.close_tab"); onTriggered: requestCloseTab(documentManager.currentIndex) }
+            Action { text: tx("action.close_other_tabs"); enabled: documentManager.count > 1 && !documentManager.hasModifiedDocuments; onTriggered: documentManager.closeOtherTabs(documentManager.currentIndex) }
+        }
+
         Menu {
             title: tx("menu.language")
             Action { text: tx("language.english"); checkable: true; checked: i18n.language === "en"; onTriggered: i18n.language = "en" }
             Action { text: tx("language.arabic"); checkable: true; checked: i18n.language === "ar"; onTriggered: i18n.language = "ar" }
         }
+
         Menu {
             title: tx("menu.help")
             Action { text: tx("action.command_palette"); onTriggered: commandDlg.open() }
+            Action { text: tx("action.check_updates"); onTriggered: appSettings.openReleasesPage() }
+            Action { text: tx("action.project_page"); onTriggered: appSettings.openProjectPage() }
             Action { text: tx("action.privacy"); onTriggered: privacyDlg.open() }
             Action { text: tx("action.support"); enabled: appSettings.supportAvailable; onTriggered: appSettings.openSupportPage() }
             Action { text: tx("action.about"); onTriggered: aboutDlg.open() }
@@ -868,6 +1042,7 @@ ApplicationWindow {
                 ToolButton { text: tx("action.new_tab"); onClicked: { documentManager.newTab(); homeVisible = false } }
                 ToolButton { text: tx("action.open"); onClicked: openDlg.open() }
                 ToolButton { text: tx("action.save"); onClicked: pdfDocument.filePath === "" ? saveDlg.open() : pdfDocument.save() }
+                ToolButton { text: tx("action.print"); enabled: printService.available; onClicked: printService.printDocument(pdfDocument, false) }
                 ToolButton { text: tx("dialog.find"); onClicked: searchDlg.open() }
                 Item { Layout.fillWidth: true }
                 Label { text: displayDocumentTitle(); color: mutedColor; elide: Text.ElideMiddle; Layout.maximumWidth: 330 }
@@ -1035,8 +1210,9 @@ ApplicationWindow {
             orientation: Qt.Horizontal
 
             Rectangle {
-                SplitView.preferredWidth: 238
-                SplitView.minimumWidth: 170
+                visible: showSidebar
+                SplitView.preferredWidth: showSidebar ? 238 : 0
+                SplitView.minimumWidth: showSidebar ? 170 : 0
                 color: subPanelColor
                 border.color: borderColor
                 ColumnLayout {

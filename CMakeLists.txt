@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(MaenPDF VERSION 7.0.1 LANGUAGES CXX)
+project(MaenPDF VERSION 7.1.0 LANGUAGES CXX)
 
 include(GNUInstallDirs)
 
@@ -24,6 +24,7 @@ qt_add_executable(MaenPDF
     core/DocumentManager.cpp core/DocumentManager.h
     core/SessionImageProvider.cpp core/SessionImageProvider.h
     core/PdfToolsService.cpp core/PdfToolsService.h
+    core/PrintService.cpp core/PrintService.h
 )
 
 set_source_files_properties(ui/Main.qml PROPERTIES QT_RESOURCE_ALIAS Main.qml)
@@ -46,6 +47,11 @@ target_link_libraries(MaenPDF PRIVATE
     Qt6::Core Qt6::Gui Qt6::Quick Qt6::Qml Qt6::QuickControls2 Qt6::Pdf
 )
 
+if(NOT ANDROID)
+    find_package(Qt6 6.11 REQUIRED COMPONENTS Widgets PrintSupport)
+    target_link_libraries(MaenPDF PRIVATE Qt6::Widgets Qt6::PrintSupport)
+endif()
+
 if(WIN32)
     set_target_properties(MaenPDF PROPERTIES
         WIN32_EXECUTABLE TRUE
@@ -66,8 +72,8 @@ if(ANDROID)
     set_property(TARGET MaenPDF PROPERTY QT_ANDROID_MIN_SDK_VERSION 28)
     set_property(TARGET MaenPDF PROPERTY QT_ANDROID_TARGET_SDK_VERSION 36)
     set_property(TARGET MaenPDF PROPERTY QT_ANDROID_COMPILE_SDK_VERSION 36)
-    set_property(TARGET MaenPDF PROPERTY QT_ANDROID_VERSION_CODE 70001)
-    set_property(TARGET MaenPDF PROPERTY QT_ANDROID_VERSION_NAME "7.0.1")
+    set_property(TARGET MaenPDF PROPERTY QT_ANDROID_VERSION_CODE 70100)
+    set_property(TARGET MaenPDF PROPERTY QT_ANDROID_VERSION_NAME "7.1.0")
 endif()
 
 if(ANDROID)

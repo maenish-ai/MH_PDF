@@ -6,6 +6,8 @@
 #include <QUrl>
 
 AppSettings::AppSettings(QObject *parent) : QObject(parent) {
+    migrateSettings();
+
     QSettings settings;
     m_darkMode = settings.value(QStringLiteral("ui/darkMode"), false).toBool();
     m_lowMemoryMode = settings.value(QStringLiteral("performance/lowMemory"), false).toBool();
@@ -14,6 +16,23 @@ AppSettings::AppSettings(QObject *parent) : QObject(parent) {
                                   qEnvironmentVariable("MAENPDF_SUPPORT_URL")).toString().trimmed();
     while (m_recentFiles.size() > 12)
         m_recentFiles.removeLast();
+}
+
+void AppSettings::migrateSettings() {
+    QSettings settings;
+    const int previous = settings.value(QStringLiteral("meta/settingsSchemaVersion"), 0).toInt();
+    if (previous >= CurrentSettingsSchema)
+        return;
+
+    // v7.1 establishes a small, versioned preferences contract. Old volatile
+    // UI/session/cache keys are discarded so stale values cannot break a new
+    // installation, while durable user choices remain compatible.
+    settings.remove(QStringLiteral("window"));
+    settings.remove(QStringLiteral("session"));
+    settings.remove(QStringLiteral("cache"));
+    settings.remove(QStringLiteral("print"));
+    settings.setValue(QStringLiteral("meta/settingsSchemaVersion"), CurrentSettingsSchema);
+    settings.sync();
 }
 
 QString AppSettings::normalizedPath(const QString &path) const {
@@ -97,4 +116,31 @@ bool AppSettings::openSupportPage() const {
 
 bool AppSettings::openProjectPage() const {
     return QDesktopServices::openUrl(QUrl(projectUrl()));
+}
+
+bool AppSettings::openReleasesPage() const {
+    return QDesktopServices::openUrl(QUrl(releasesUrl()));
+}
+
+void AppSettings::resetApplicationSettings(bool keepLanguage) {
+    QSettings settings;
+    const QString language = settings.value(QStringLiteral("ui/language"), QStringLiteral("en")).toString();
+    const QString support = settings.value(QStringLiteral("community/supportUrl"), m_supportUrl).toString();
+    settings.clear();
+    settings.setValue(QStringLiteral("meta/settingsSchemaVersion"), CurrentSettingsSchema);
+    if (keepLanguage)
+        settings.setValue(QStringLiteral("ui/language"), language == QStringLiteral("ar") ? QStringLiteral("ar") : QStringLiteral("en"));
+    if (!support.trimmed().isEmpty())
+        settings.setValue(QStringLiteral("community/supportUrl"), support.trimmed());
+    settings.sync();
+
+    m_darkMode = false;
+    m_lowMemoryMode = false;
+    m_recentFiles.clear();
+    m_supportUrl = support.trimmed();
+    emit darkModeChanged();
+    emit lowMemoryModeChanged();
+    emit recentFilesChanged();
+    emit supportUrlChanged();
+    emit settingsReset();
 }

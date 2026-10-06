@@ -3,6 +3,9 @@
 #include <QDir>
 #include <QDebug>
 #include <QGuiApplication>
+#ifndef Q_OS_ANDROID
+#include <QApplication>
+#endif
 #include <QIcon>
 #include <QQuickStyle>
 #include <QQuickWindow>
@@ -27,6 +30,7 @@
 #include "../core/DocumentManager.h"
 #include "../core/LanguageManager.h"
 #include "../core/PdfToolsService.h"
+#include "../core/PrintService.h"
 #include "../core/SessionImageProvider.h"
 
 namespace {
@@ -59,7 +63,11 @@ int main(int argc, char *argv[])
         qputenv("QT_QUICK_BACKEND", QByteArrayLiteral("software"));
 #endif
 
+#ifdef Q_OS_ANDROID
     QGuiApplication app(argc, argv);
+#else
+    QApplication app(argc, argv);
+#endif
 
 #ifdef Q_OS_WIN
     // These calls are made after QGuiApplication exists but before the first
@@ -74,7 +82,7 @@ int main(int argc, char *argv[])
     QGuiApplication::setOrganizationName(QStringLiteral("MaenPDF"));
     QGuiApplication::setOrganizationDomain(QStringLiteral("maenpdf.local"));
     QGuiApplication::setApplicationName(QStringLiteral("MaenPDF"));
-    QGuiApplication::setApplicationVersion(QStringLiteral("7.0.1"));
+    QGuiApplication::setApplicationVersion(QStringLiteral("7.1.0"));
     AppLogger::install();
 
     // Make startup independent of how the process was launched (desktop
@@ -82,7 +90,7 @@ int main(int argc, char *argv[])
     QDir::setCurrent(QCoreApplication::applicationDirPath());
 
     AppLogger::write(QStringLiteral("INFO"),
-                     QStringLiteral("MaenPDF 7.0.1 startup; Qt %1; appDir=%2; cwd=%3; QT_QUICK_BACKEND=%4")
+                     QStringLiteral("MaenPDF 7.1.0 startup; Qt %1; appDir=%2; cwd=%3; QT_QUICK_BACKEND=%4")
                          .arg(QString::fromLatin1(qVersion()),
                               QCoreApplication::applicationDirPath(),
                               QDir::currentPath(),
@@ -95,11 +103,13 @@ int main(int argc, char *argv[])
     AppSettings appSettings;
     DocumentManager documentManager(&appSettings);
     PdfToolsService pdfTools;
+    PrintService printService;
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("documentManager"), &documentManager);
     engine.rootContext()->setContextProperty(QStringLiteral("appSettings"), &appSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("pdfTools"), &pdfTools);
+    engine.rootContext()->setContextProperty(QStringLiteral("printService"), &printService);
     engine.rootContext()->setContextProperty(QStringLiteral("i18n"), &languageManager);
     engine.addImageProvider(QStringLiteral("maenpdf"),
                             new SessionImageProvider(&documentManager));
