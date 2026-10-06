@@ -1,4 +1,4 @@
-# MaenPDF 7.2.0 — Release Checklist
+# MaenPDF 7.2.1 — Release Checklist
 
 ## Interaction and UX
 - [x] Continuous page scrolling replaces the single fixed page viewer.
@@ -21,7 +21,7 @@
 - [x] No document cloud upload path exists in the core.
 
 ## Windows
-- [x] Version `7.2.0`.
+- [x] Version `7.2.1`.
 - [x] Clean application-directory replacement on update retained.
 - [x] Native Print / Print Current Page / Print Preview retained.
 - [x] VC143 runtime remains bundled side-by-side.
@@ -30,8 +30,8 @@
 
 ## Android
 - [x] Package ID remains `org.orbispdf.app` for update continuity.
-- [x] versionName `7.2.0`.
-- [x] versionCode `70200`.
+- [x] versionName `7.2.1`.
+- [x] versionCode `70201`.
 - [x] Target API 36 / minimum API 28.
 - [x] Signed installable CI APK preserved before AAB build.
 

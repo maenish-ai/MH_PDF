@@ -16,6 +16,7 @@ checks = {
     'viewport tracks current page': 'onContentYChanged:' in qml and 'pdfDocument.currentPage = idx' in qml,
     'thumbnail navigation follows current page': 'currentIndex: pdfDocument.currentPage' in qml,
     'real PDF text selection API': 'textSelection(int page' in h and 'm_doc.getSelection(page' in backend,
+    'text selection snaps whitespace endpoints': 'snapToTextBounds' in backend and 'm_doc.getAllText(page)' in backend and 'normalizedDrag.contains(textBounds)' in backend,
     'text selection geometry rendered': 'selectedTextRects' in qml and 'modelData.w * pageSurface.width' in qml,
     'copy selected text': 'copyTextToClipboard' in h and 'action.copy_text' in qml,
     'highlight from text geometry': 'addHighlightRects' in h and 'finishTextDrag(mouse, true)' in qml,

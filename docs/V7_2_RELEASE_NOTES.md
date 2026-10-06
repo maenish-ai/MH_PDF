@@ -1,4 +1,4 @@
-# MaenPDF 7.2.0 — Interaction & Performance Release
+# MaenPDF 7.2.1 — Interaction & Performance Release
 
 This release replaces the single-page workspace with a virtualized continuous document viewer and turns the primary pointer tools into working document interactions.
 
@@ -28,3 +28,7 @@ The Windows workflow now runs a three-page PDF fixture through an interaction sm
 
 ## Capability boundary
 Structural rewriting of existing PDF text objects, certificate-backed digital signatures, AcroForm authoring and true object-tree redaction remain deliberately disabled until a verified structural writer/provider is integrated.
+
+## 7.2.1 stabilization
+
+GitHub Run #15 proved the application, PDF workspace, Windows runtime, and Android builds were healthy, but the interaction smoke test exposed an edge case in text selection when a drag starts or ends in page whitespace. The backend now snaps those endpoints to nearby text geometry and safely falls back to the full text selection only when the drag rectangle encloses that text.

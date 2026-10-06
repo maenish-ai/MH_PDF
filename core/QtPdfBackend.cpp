@@ -2,6 +2,7 @@
 #include <QMutexLocker>
 #include <QPdfSelection>
 #include <QPolygonF>
+#include <limits>
 
 bool QtPdfBackend::open(const QString &path, const QString &password, QString *error) {
     QMutexLocker<QMutex> locker(&m_mutex);
@@ -66,38 +67,110 @@ QVariantList QtPdfBackend::search(const QString &needle, int maxResults) const {
 }
 
 QVariantMap QtPdfBackend::textSelection(int page, const QPointF &start, const QPointF &end) const {
-    QVariantMap result;
-    result[QStringLiteral("valid")] = false;
-    result[QStringLiteral("text")] = QString();
-    result[QStringLiteral("rects")] = QVariantList{};
+    QVariantMap empty;
+    empty[QStringLiteral("valid")] = false;
+    empty[QStringLiteral("text")] = QString();
+    empty[QStringLiteral("rects")] = QVariantList{};
 
     QMutexLocker<QMutex> locker(&m_mutex);
     if (page < 0 || page >= m_doc.pageCount())
-        return result;
+        return empty;
 
-    const QPdfSelection selection = m_doc.getSelection(page, start, end);
-    if (!selection.isValid() || selection.text().isEmpty())
-        return result;
-
-    QVariantList rects;
     const QSizeF points = m_doc.pagePointSize(page);
     if (points.width() <= 0 || points.height() <= 0)
+        return empty;
+
+    auto selectionToResult = [&points](const QPdfSelection &selection) {
+        QVariantMap result;
+        QVariantList rects;
+        if (selection.isValid() && !selection.text().isEmpty()) {
+            for (const QPolygonF &polygon : selection.bounds()) {
+                const QRectF r = polygon.boundingRect().normalized();
+                if (r.width() <= 0 || r.height() <= 0)
+                    continue;
+                QVariantMap item;
+                item[QStringLiteral("x")] = qBound(0.0, r.x() / points.width(), 1.0);
+                item[QStringLiteral("y")] = qBound(0.0, r.y() / points.height(), 1.0);
+                item[QStringLiteral("w")] = qBound(0.0, r.width() / points.width(), 1.0);
+                item[QStringLiteral("h")] = qBound(0.0, r.height() / points.height(), 1.0);
+                rects.push_back(item);
+            }
+        }
+        result[QStringLiteral("valid")] = !rects.isEmpty();
+        result[QStringLiteral("text")] = selection.isValid() ? selection.text() : QString();
+        result[QStringLiteral("rects")] = rects;
+        return result;
+    };
+
+    // QPdfDocument::getSelection() expects its endpoints to land on text.
+    // A normal mouse drag often begins/ends in the page margin, especially
+    // when the user sweeps over an entire line/page. Try the literal points
+    // first, then snap whitespace endpoints to the nearest text geometry.
+    const QPdfSelection selection = m_doc.getSelection(page, start, end);
+    QVariantMap result = selectionToResult(selection);
+    if (result.value(QStringLiteral("valid")).toBool())
         return result;
 
-    for (const QPolygonF &polygon : selection.bounds()) {
-        const QRectF r = polygon.boundingRect();
-        if (r.width() <= 0 || r.height() <= 0)
-            continue;
-        QVariantMap item;
-        item[QStringLiteral("x")] = r.x() / points.width();
-        item[QStringLiteral("y")] = r.y() / points.height();
-        item[QStringLiteral("w")] = r.width() / points.width();
-        item[QStringLiteral("h")] = r.height() / points.height();
-        rects.push_back(item);
-    }
+    const QPdfSelection allText = m_doc.getAllText(page);
+    if (!allText.isValid() || allText.text().isEmpty() || allText.bounds().isEmpty())
+        return empty;
 
-    result[QStringLiteral("valid")] = !rects.isEmpty();
-    result[QStringLiteral("text")] = selection.text();
-    result[QStringLiteral("rects")] = rects;
-    return result;
+    const QList<QPolygonF> textPolygons = allText.bounds();
+    auto snapToTextBounds = [&textPolygons](const QPointF &point) {
+        QPointF best = point;
+        qreal bestDistance = std::numeric_limits<qreal>::max();
+        for (const QPolygonF &polygon : textPolygons) {
+            const QRectF rect = polygon.boundingRect().normalized();
+            if (rect.width() <= 0 || rect.height() <= 0)
+                continue;
+
+            const qreal insetX = qMin<qreal>(0.25, rect.width() * 0.20);
+            const qreal insetY = qMin<qreal>(0.25, rect.height() * 0.20);
+            qreal left = rect.left() + insetX;
+            qreal right = rect.right() - insetX;
+            qreal top = rect.top() + insetY;
+            qreal bottom = rect.bottom() - insetY;
+            if (left > right)
+                left = right = rect.center().x();
+            if (top > bottom)
+                top = bottom = rect.center().y();
+
+            const QPointF candidate(qBound(left, point.x(), right),
+                                    qBound(top, point.y(), bottom));
+            const qreal dx = candidate.x() - point.x();
+            const qreal dy = candidate.y() - point.y();
+            const qreal distance = dx * dx + dy * dy;
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = candidate;
+            }
+        }
+        return best;
+    };
+
+    const QPointF snappedStart = snapToTextBounds(start);
+    const QPointF snappedEnd = snapToTextBounds(end);
+    const QPdfSelection snappedSelection = m_doc.getSelection(page, snappedStart, snappedEnd);
+    result = selectionToResult(snappedSelection);
+    if (result.value(QStringLiteral("valid")).toBool())
+        return result;
+
+    // If the user's drag rectangle encloses the document text, selecting all
+    // text is the least surprising fallback and also handles single-line PDFs
+    // where both snapped endpoints can resolve to the same glyph.
+    QRectF textBounds;
+    bool haveTextBounds = false;
+    for (const QPolygonF &polygon : textPolygons) {
+        const QRectF rect = polygon.boundingRect().normalized();
+        if (rect.width() <= 0 || rect.height() <= 0)
+            continue;
+        textBounds = haveTextBounds ? textBounds.united(rect) : rect;
+        haveTextBounds = true;
+    }
+    const QRectF dragRect(start, end);
+    const QRectF normalizedDrag = dragRect.normalized().adjusted(-1.0, -1.0, 1.0, 1.0);
+    if (haveTextBounds && normalizedDrag.contains(textBounds))
+        return selectionToResult(allText);
+
+    return empty;
 }
