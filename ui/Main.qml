@@ -26,6 +26,7 @@ ApplicationWindow {
     property var pendingActionRect: ({"x": 0, "y": 0, "w": 0, "h": 0})
     property color drawColor: "#2563eb"
     property real drawWidth: 3.0
+    property real minInkStepPx: appSettings.lowMemoryMode ? 4.0 : 2.5
     property int drawOpacity: 100
     property color highlightColor: "#ffd54f"
     property int highlightOpacity: 42
@@ -173,6 +174,11 @@ ApplicationWindow {
     }
 
     onClosing: function(close) {
+        if (pdfTools.busy) {
+            close.accepted = false
+            showToast("status.wait_operation", [])
+            return
+        }
         if (!allowWindowClose && documentManager.hasModifiedDocuments) {
             close.accepted = false
             closeAllDlg.open()
@@ -220,12 +226,41 @@ ApplicationWindow {
         function onOperationFinished(key, args) { showToast(key, args) }
         function onOperationFailed(key, args) { showToast(key, args) }
         function onProvidersChanged() { providersState = pdfTools.providers }
+        function onCompareReady(results) { compareResults = results; compareResultDlg.open() }
+        function onReportReady(report) { toolReport = report; reportDlg.open() }
     }
 
     Connections {
         target: printService
         function onOperationFinished(key, args) { showToast(key, args) }
         function onOperationFailed(key, args) { showToast(key, args) }
+    }
+
+    Rectangle {
+        anchors.fill: parent
+        z: 900
+        visible: pdfTools.busy
+        color: appSettings.darkMode ? "#66000000" : "#55ffffff"
+        MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons }
+        Rectangle {
+            anchors.centerIn: parent
+            width: 300
+            height: 110
+            radius: 14
+            color: panelColor
+            border.color: borderColor
+            RowLayout {
+                anchors.fill: parent
+                anchors.margins: 18
+                spacing: 14
+                BusyIndicator { running: pdfTools.busy }
+                ColumnLayout {
+                    Label { text: tx("status.processing"); font.bold: true; color: textColor }
+                    Label { text: pdfTools.currentOperation; color: mutedColor; Layout.maximumWidth: 210; elide: Text.ElideRight }
+                    Label { text: tx("status.ui_responsive"); color: mutedColor; font.pixelSize: 10; wrapMode: Text.WordWrap; Layout.maximumWidth: 210 }
+                }
+            }
+        }
     }
 
     DropArea {
@@ -313,10 +348,7 @@ ApplicationWindow {
         id: compareDlg
         title: tx("file.compare_with")
         nameFilters: [tx("file.pdf_filter")]
-        onAccepted: {
-            compareResults = pdfTools.comparePdf(pdfDocument.filePath, selectedFile, 0)
-            compareResultDlg.open()
-        }
+        onAccepted: pdfTools.startComparePdf(pdfDocument.filePath, selectedFile, 0)
     }
 
     FileDialog {
@@ -328,30 +360,55 @@ ApplicationWindow {
         defaultSuffix: "pdf"
         onAccepted: {
             if (operation === "optimize")
-                pdfTools.optimizePdf(pdfDocument.filePath, selectedFile)
+                pdfTools.startOptimizePdf(pdfDocument.filePath, selectedFile)
             else if (operation === "linearize")
-                pdfTools.linearizePdf(pdfDocument.filePath, selectedFile)
+                pdfTools.startLinearizePdf(pdfDocument.filePath, selectedFile)
             else if (operation === "repair")
-                pdfTools.repairPdf(pdfDocument.filePath, selectedFile)
+                pdfTools.startRepairPdf(pdfDocument.filePath, selectedFile)
             else if (operation === "safeFlatten")
-                pdfTools.safeFlattenPdf(pdfDocument.filePath, selectedFile, 150)
+                pdfTools.startSafeFlattenPdf(pdfDocument.filePath, selectedFile, 150)
             else if (operation === "ocr")
-                pdfTools.ocrToSearchablePdf(pdfDocument.filePath, selectedFile, ocrLanguages.text, ocrDpi.value)
+                pdfTools.startOcrToSearchablePdf(pdfDocument.filePath, selectedFile, ocrLanguages.text, ocrDpi.value)
             else if (operation === "decrypt")
-                pdfTools.decryptPdf(pdfDocument.filePath, selectedFile, decryptPassword.text)
+                pdfTools.startDecryptPdf(pdfDocument.filePath, selectedFile, decryptPassword.text)
         }
     }
 
     FolderDialog {
         id: imagesFolderDlg
         title: tx("file.choose_folder")
-        onAccepted: pdfTools.exportImages(pdfDocument.filePath, selectedFolder, exportDpi.value)
+        onAccepted: pdfTools.startExportImages(pdfDocument.filePath, selectedFolder, exportDpi.value)
     }
 
     FolderDialog {
         id: splitFolderDlg
         title: tx("file.choose_folder")
-        onAccepted: pdfTools.splitPdf(pdfDocument.filePath, selectedFolder, splitPages.value)
+        onAccepted: pdfTools.startSplitPdf(pdfDocument.filePath, selectedFolder, splitPages.value)
+    }
+
+    FileDialog {
+        id: batchOptimizeFilesDlg
+        title: tx("file.batch_optimize")
+        fileMode: FileDialog.OpenFiles
+        nameFilters: [tx("file.pdf_filter")]
+        onAccepted: {
+            batchOptimizeFolderDlg.inputs = selectedFiles
+            batchOptimizeFolderDlg.open()
+        }
+    }
+
+    FolderDialog {
+        id: batchOptimizeFolderDlg
+        property var inputs: []
+        title: tx("file.choose_folder")
+        onAccepted: {
+            var paths = []
+            for (var i = 0; i < inputs.length; ++i)
+                paths.push(inputs[i].toString())
+            pdfTools.startBatchOptimize(paths, selectedFolder)
+            inputs = []
+        }
+        onRejected: inputs = []
     }
 
     FileDialog {
@@ -370,7 +427,7 @@ ApplicationWindow {
         fileMode: FileDialog.SaveFile
         nameFilters: [tx("file.pdf_filter")]
         defaultSuffix: "pdf"
-        onAccepted: pdfTools.imageToPdf(pendingImagePath, selectedFile)
+        onAccepted: pdfTools.startImageToPdf(pendingImagePath, selectedFile)
     }
 
     FileDialog {
@@ -389,7 +446,7 @@ ApplicationWindow {
                 open()
         }
         onAccepted: {
-            pdfTools.officeToPdf(pendingOffice, selectedFolder)
+            pdfTools.startOfficeToPdf(pendingOffice, selectedFolder)
             pendingOffice = ""
         }
         onRejected: pendingOffice = ""
@@ -815,6 +872,17 @@ ApplicationWindow {
                 checked: appSettings.lowMemoryMode
                 onToggled: appSettings.lowMemoryMode = checked
             }
+            CheckBox {
+                text: tx("action.safe_graphics")
+                checked: appSettings.safeGraphics
+                onToggled: appSettings.safeGraphics = checked
+            }
+            Label {
+                text: tx("preferences.safe_graphics_note")
+                color: mutedColor
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
             Label {
                 text: tx("preferences.schema", [i18n.number(appSettings.settingsSchemaVersion)])
                 color: mutedColor
@@ -935,6 +1003,7 @@ ApplicationWindow {
                 Action { text: tx("action.extract"); onTriggered: extractDlg.open() }
                 Action { text: tx("action.export_images"); enabled: pdfDocument.filePath !== ""; onTriggered: exportImagesDlg.open() }
                 Action { text: tx("action.safe_flatten"); enabled: pdfDocument.filePath !== ""; onTriggered: { toolOutputDlg.operation = "safeFlatten"; toolOutputDlg.open() } }
+            Action { text: tx("action.sanitize_privacy"); enabled: pdfDocument.filePath !== ""; onTriggered: { toolOutputDlg.operation = "safeFlatten"; toolOutputDlg.open() } }
             }
             MenuSeparator {}
             Action { text: tx("action.print"); enabled: printService.available; onTriggered: printService.printDocument(pdfDocument, false) }
@@ -986,10 +1055,7 @@ ApplicationWindow {
             Action {
                 text: tx("action.check")
                 enabled: providersState.qpdf && pdfDocument.filePath !== ""
-                onTriggered: {
-                    toolReport = pdfTools.checkPdf(pdfDocument.filePath)
-                    reportDlg.open()
-                }
+                onTriggered: pdfTools.startCheckPdf(pdfDocument.filePath)
             }
             Action { text: tx("action.properties"); onTriggered: propertiesDlg.open() }
         }
@@ -1058,8 +1124,8 @@ ApplicationWindow {
             Action { text: tx("action.command_palette"); onTriggered: commandDlg.open() }
             Action { text: tx("action.providers"); onTriggered: providersDlg.open() }
             Action { text: tx("action.compare"); enabled: pdfDocument.filePath !== ""; onTriggered: compareDlg.open() }
-            Action { text: tx("action.check"); enabled: providersState.qpdf && pdfDocument.filePath !== ""; onTriggered: { toolReport = pdfTools.checkPdf(pdfDocument.filePath); reportDlg.open() } }
-            Action { text: tx("action.batch_processing"); enabled: false }
+            Action { text: tx("action.check"); enabled: providersState.qpdf && pdfDocument.filePath !== ""; onTriggered: pdfTools.startCheckPdf(pdfDocument.filePath) }
+            Action { text: tx("action.batch_optimize"); enabled: providersState.qpdf && !pdfTools.busy; onTriggered: batchOptimizeFilesDlg.open() }
         }
 
         Menu {
@@ -1440,6 +1506,8 @@ ApplicationWindow {
                         property real pressY: 0
                         property var localInkPoints: []
                         property bool drawingInk: false
+                        property int paintedInkPoints: 0
+                        property bool clearInkCanvas: false
 
                         function normalizedRect(x1, y1, x2, y2) {
                             var left = Math.max(0, Math.min(x1, x2) / Math.max(1, pageSurface.width))
@@ -1541,10 +1609,19 @@ ApplicationWindow {
                                 id: liveInk
                                 anchors.fill: parent
                                 visible: pageDelegate.drawingInk && tool === "draw"
+                                renderStrategy: Canvas.Threaded
                                 onPaint: {
                                     var ctx = getContext("2d")
-                                    ctx.clearRect(0, 0, width, height)
-                                    if (pageDelegate.localInkPoints.length < 4)
+                                    if (pageDelegate.clearInkCanvas) {
+                                        ctx.clearRect(0, 0, width, height)
+                                        pageDelegate.clearInkCanvas = false
+                                        pageDelegate.paintedInkPoints = 0
+                                    }
+                                    var pts = pageDelegate.localInkPoints
+                                    if (pts.length < 4)
+                                        return
+                                    var start = Math.max(0, pageDelegate.paintedInkPoints - 2)
+                                    if (start + 3 >= pts.length)
                                         return
                                     ctx.beginPath()
                                     ctx.strokeStyle = drawColor.toString()
@@ -1552,10 +1629,11 @@ ApplicationWindow {
                                     ctx.lineWidth = drawWidth
                                     ctx.lineCap = "round"
                                     ctx.lineJoin = "round"
-                                    ctx.moveTo(pageDelegate.localInkPoints[0] * width, pageDelegate.localInkPoints[1] * height)
-                                    for (var i = 2; i + 1 < pageDelegate.localInkPoints.length; i += 2)
-                                        ctx.lineTo(pageDelegate.localInkPoints[i] * width, pageDelegate.localInkPoints[i + 1] * height)
+                                    ctx.moveTo(pts[start] * width, pts[start + 1] * height)
+                                    for (var i = start + 2; i + 1 < pts.length; i += 2)
+                                        ctx.lineTo(pts[i] * width, pts[i + 1] * height)
                                     ctx.stroke()
+                                    pageDelegate.paintedInkPoints = pts.length
                                 }
                             }
 
@@ -1639,6 +1717,8 @@ ApplicationWindow {
                                         textDlg.open()
                                     } else if (tool === "draw") {
                                         pageDelegate.localInkPoints = [mouse.x / Math.max(1, width), mouse.y / Math.max(1, height)]
+                                        pageDelegate.paintedInkPoints = 0
+                                        pageDelegate.clearInkCanvas = true
                                         pageDelegate.drawingInk = true
                                         liveInk.requestPaint()
                                     }
@@ -1646,11 +1726,19 @@ ApplicationWindow {
 
                                 onPositionChanged: function(mouse) {
                                     if (pressed && tool === "draw" && pageDelegate.drawingInk) {
-                                        var next = pageDelegate.localInkPoints.slice(0)
-                                        next.push(mouse.x / Math.max(1, width))
-                                        next.push(mouse.y / Math.max(1, height))
-                                        pageDelegate.localInkPoints = next
-                                        liveInk.requestPaint()
+                                        var pts = pageDelegate.localInkPoints
+                                        var nx = mouse.x / Math.max(1, width)
+                                        var ny = mouse.y / Math.max(1, height)
+                                        var count = pts.length
+                                        var lx = count >= 2 ? pts[count - 2] * width : mouse.x
+                                        var ly = count >= 2 ? pts[count - 1] * height : mouse.y
+                                        var dx = mouse.x - lx
+                                        var dy = mouse.y - ly
+                                        if ((dx * dx + dy * dy) >= (minInkStepPx * minInkStepPx)) {
+                                            pts.push(nx)
+                                            pts.push(ny)
+                                            liveInk.requestPaint()
+                                        }
                                     }
                                 }
 
@@ -1660,6 +1748,8 @@ ApplicationWindow {
                                             pdfDocument.addInkStyled(index, pageDelegate.localInkPoints, drawColor.toString(), Math.max(0.0006, drawWidth / Math.max(1, pageSurface.width)), drawOpacity)
                                         pageDelegate.localInkPoints = []
                                         pageDelegate.drawingInk = false
+                                        pageDelegate.paintedInkPoints = 0
+                                        pageDelegate.clearInkCanvas = true
                                         liveInk.requestPaint()
                                     } else if (tool === "select") {
                                         pageDelegate.finishTextDrag(mouse, false)
@@ -1685,6 +1775,8 @@ ApplicationWindow {
                                 onCanceled: {
                                     pageDelegate.localInkPoints = []
                                     pageDelegate.drawingInk = false
+                                    pageDelegate.paintedInkPoints = 0
+                                    pageDelegate.clearInkCanvas = true
                                     liveInk.requestPaint()
                                 }
                             }

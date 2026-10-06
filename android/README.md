@@ -4,7 +4,7 @@ MaenPDF 7 targets Android API 36 with minimum API 28. The internal package ID re
 
 ## CI test installation
 
-The standard CI workflow creates `MaenPDF-Installable-Test.apk`, signs it with an ephemeral CI-only key and verifies it with `apksigner`. It can be installed directly for testing on a compatible Android device. Because the CI test key changes between workflow runs, uninstall an older CI-test build first if Android reports a signing-key mismatch.
+The standard CI workflow creates `MaenPDF-Android-CI-Test.apk`, signs it with an ephemeral CI-only key and verifies it with `apksigner`. It can be installed directly for testing on a compatible Android device. Because the CI test key changes between workflow runs, uninstall an older CI-test build first if Android reports a signing-key mismatch.
 
 An `.aab` is a Play/Bundle artifact and is not installed directly on a phone.
 

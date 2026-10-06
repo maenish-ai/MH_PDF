@@ -135,5 +135,6 @@ private:
     void cleanupTemporaryInputs();
     void snapshotCommand(int page, const QImage &before, const QImage &after, const QString &label);
     void autosave();
+    bool writeRecoveryJournal();
     void refreshRecoveryState();
 };

@@ -311,5 +311,14 @@
   "tools.error.security_scheme": "The PDF security scheme is unsupported.",
   "tools.error.temp": "A secure temporary workspace could not be created.",
   "tools.error.tesseract_missing": "The optional local OCR engine is not installed.",
-  "tools.error.write_pdf": "The output PDF could not be written."
+  "tools.error.write_pdf": "The output PDF could not be written.",
+  "action.safe_graphics": "Safe graphics mode",
+  "preferences.safe_graphics_note": "Use software graphics only if your GPU/driver is unstable. Restart MaenPDF after changing this option.",
+  "status.processing": "Processing…",
+  "status.ui_responsive": "The job runs in the background so the interface stays responsive.",
+  "status.wait_operation": "Please wait for the current local operation to finish before closing MaenPDF.",
+  "action.batch_optimize": "Batch optimize PDFs",
+  "file.batch_optimize": "Choose PDFs to optimize",
+  "tools.done.batch_optimize": "Optimized %1 PDF files.",
+  "action.sanitize_privacy": "Sanitize / privacy flatten"
 }

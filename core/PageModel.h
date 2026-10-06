@@ -4,6 +4,7 @@
 #include <QHash>
 #include <QImage>
 #include <QList>
+#include <QMutex>
 #include <QSizeF>
 #include <QString>
 #include <QVector>
@@ -81,6 +82,7 @@ private:
     mutable QHash<QString, CacheEntry> m_cache;
     mutable QList<QString> m_lru;
     mutable qint64 m_cacheBytes{0};
+    mutable QMutex m_cacheMutex;
     qint64 m_cacheBudget{0};
     int m_modelRevision{0};
     QString m_providerNamespace{QStringLiteral("0")};

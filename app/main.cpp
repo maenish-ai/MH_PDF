@@ -13,8 +13,14 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QTimer>
+#include <QSettings>
+#include <QStandardPaths>
+#include <QFile>
+#include <QFileInfo>
+#include <QElapsedTimer>
 #include <QtGlobal>
 #include <cstdlib>
+#include <QtMath>
 
 #ifdef Q_OS_WIN
 #ifndef NOMINMAX
@@ -58,41 +64,52 @@ void showStartupFailure(const QString &details)
 
 int main(int argc, char *argv[])
 {
-#ifdef Q_OS_WIN
-    // Force the most compatible Qt Quick path before any window is created.
-    // This avoids silent startup failures caused by broken GPU/D3D drivers.
-    if (qEnvironmentVariableIsEmpty("QT_QUICK_BACKEND"))
-        qputenv("QT_QUICK_BACKEND", QByteArrayLiteral("software"));
-#endif
-
 #ifdef Q_OS_ANDROID
     QGuiApplication app(argc, argv);
 #else
     QApplication app(argc, argv);
 #endif
 
-#ifdef Q_OS_WIN
-    // These calls are made after QGuiApplication exists but before the first
-    // QQuickWindow/QML control is created. Pin both rendering and controls to
-    // the compatibility-oriented paths used by MaenPDF on Windows.
-    QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
-    QQuickStyle::setStyle(QStringLiteral("Basic"));
-#endif
-
-    // Set application identity before the logger resolves AppLocalDataLocation
+    // Set application identity before settings/logger paths are resolved.
     // so every startup message is written to one deterministic path.
     QGuiApplication::setOrganizationName(QStringLiteral("MaenPDF"));
     QGuiApplication::setOrganizationDomain(QStringLiteral("maenpdf.local"));
     QGuiApplication::setApplicationName(QStringLiteral("MaenPDF"));
-    QGuiApplication::setApplicationVersion(QStringLiteral("7.2.1"));
+    QGuiApplication::setApplicationVersion(QStringLiteral("7.3.0"));
     AppLogger::install();
+
+#ifdef Q_OS_WIN
+    // Use Qt's accelerated renderer by default. Software rendering is kept as a
+    // deterministic safe mode for old/broken GPU drivers. A startup marker lets
+    // the next launch recover automatically if the previous graphics startup
+    // terminated before the first window was created.
+    const QString graphicsMarker = QDir(QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation))
+                                       .filePath(QStringLiteral("graphics-startup.pending"));
+    QDir().mkpath(QFileInfo(graphicsMarker).dir().absolutePath());
+    const bool commandSafe = QCoreApplication::arguments().contains(QStringLiteral("--safe-graphics"));
+    const bool previousGraphicsStartupFailed = QFileInfo::exists(graphicsMarker);
+    const bool safeGraphics = commandSafe || previousGraphicsStartupFailed
+        || QSettings().value(QStringLiteral("performance/safeGraphics"), false).toBool();
+    if (safeGraphics) {
+        qputenv("QT_QUICK_BACKEND", QByteArrayLiteral("software"));
+        QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
+    }
+    QQuickStyle::setStyle(QStringLiteral("Basic"));
+    QFile marker(graphicsMarker);
+    if (marker.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        marker.write("pending\n");
+        marker.close();
+    }
+#else
+    const QString graphicsMarker;
+#endif
 
     // Make startup independent of how the process was launched (desktop
     // shortcut, Start menu, Explorer, terminal, file association, etc.).
     QDir::setCurrent(QCoreApplication::applicationDirPath());
 
     AppLogger::write(QStringLiteral("INFO"),
-                     QStringLiteral("MaenPDF 7.2.1 startup; Qt %1; appDir=%2; cwd=%3; QT_QUICK_BACKEND=%4")
+                     QStringLiteral("MaenPDF 7.3.0 startup; Qt %1; appDir=%2; cwd=%3; QT_QUICK_BACKEND=%4")
                          .arg(QString::fromLatin1(qVersion()),
                               QCoreApplication::applicationDirPath(),
                               QDir::currentPath(),
@@ -125,6 +142,9 @@ int main(int argc, char *argv[])
     }
 
     AppLogger::write(QStringLiteral("INFO"), QStringLiteral("Main window created successfully"));
+#ifdef Q_OS_WIN
+    QFile::remove(graphicsMarker);
+#endif
 
     if (argc > 1) {
         const QString firstArgument = QString::fromLocal8Bit(argv[1]);
@@ -155,6 +175,26 @@ int main(int argc, char *argv[])
             document->addRedaction(1, 0.12, 0.12, 0.22, 0.08);
             document->cropPage(2, 0.05, 0.05, 0.90, 0.90);
             document->setCurrentPage(2);
+
+            // Stress the committed ink path with a realistic long stroke. The
+            // live QML path is incremental; this catches regressions in the
+            // backend/undo overlay commit without requiring GUI automation.
+            QVariantList longStroke;
+            longStroke.reserve(4000);
+            for (int i = 0; i < 2000; ++i) {
+                const double t = i / 1999.0;
+                longStroke << (0.08 + 0.84 * t) << (0.50 + 0.08 * qSin(t * 24.0));
+            }
+            QElapsedTimer inkTimer;
+            inkTimer.start();
+            document->addInkStyled(0, longStroke, QStringLiteral("#2563EB"), 0.003, 100);
+            const qint64 inkMs = inkTimer.elapsed();
+            AppLogger::write(QStringLiteral("INFO"), QStringLiteral("INTERACTION_SMOKE_LONG_INK_MS=%1").arg(inkMs));
+            if (inkMs > 5000) {
+                AppLogger::write(QStringLiteral("FATAL"), QStringLiteral("INTERACTION_SMOKE_LONG_INK_TOO_SLOW"));
+                return EXIT_FAILURE;
+            }
+
             if (!document->modified() || document->currentPage() != 2 || !document->canUndo()) {
                 AppLogger::write(QStringLiteral("FATAL"), QStringLiteral("INTERACTION_SMOKE_EDIT_STATE_FAILED"));
                 return EXIT_FAILURE;

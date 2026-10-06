@@ -9,6 +9,7 @@ class AppSettings final : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool darkMode READ darkMode WRITE setDarkMode NOTIFY darkModeChanged)
     Q_PROPERTY(bool lowMemoryMode READ lowMemoryMode WRITE setLowMemoryMode NOTIFY lowMemoryModeChanged)
+    Q_PROPERTY(bool safeGraphics READ safeGraphics WRITE setSafeGraphics NOTIFY safeGraphicsChanged)
     Q_PROPERTY(QVariantList recentFiles READ recentFiles NOTIFY recentFilesChanged)
     Q_PROPERTY(QString supportUrl READ supportUrl NOTIFY supportUrlChanged)
     Q_PROPERTY(bool supportAvailable READ supportAvailable NOTIFY supportUrlChanged)
@@ -16,12 +17,13 @@ class AppSettings final : public QObject {
     Q_PROPERTY(QString releasesUrl READ releasesUrl CONSTANT)
     Q_PROPERTY(int settingsSchemaVersion READ settingsSchemaVersion CONSTANT)
 public:
-    static constexpr int CurrentSettingsSchema = 2;
+    static constexpr int CurrentSettingsSchema = 3;
 
     explicit AppSettings(QObject *parent = nullptr);
 
     bool darkMode() const { return m_darkMode; }
     bool lowMemoryMode() const { return m_lowMemoryMode; }
+    bool safeGraphics() const { return m_safeGraphics; }
     QVariantList recentFiles() const;
     QString supportUrl() const { return m_supportUrl; }
     bool supportAvailable() const { return !m_supportUrl.trimmed().isEmpty(); }
@@ -31,6 +33,7 @@ public:
 
     Q_INVOKABLE void setDarkMode(bool value);
     Q_INVOKABLE void setLowMemoryMode(bool value);
+    Q_INVOKABLE void setSafeGraphics(bool value);
     Q_INVOKABLE void addRecentFile(const QString &path);
     Q_INVOKABLE void clearRecentFiles();
     Q_INVOKABLE void setSupportUrl(const QString &url);
@@ -43,6 +46,7 @@ public:
 signals:
     void darkModeChanged();
     void lowMemoryModeChanged();
+    void safeGraphicsChanged();
     void recentFilesChanged();
     void supportUrlChanged();
     void settingsReset();
@@ -52,6 +56,7 @@ private:
     void persistRecentFiles();
     bool m_darkMode{false};
     bool m_lowMemoryMode{false};
+    bool m_safeGraphics{false};
     QStringList m_recentFiles;
     QString m_supportUrl;
 };

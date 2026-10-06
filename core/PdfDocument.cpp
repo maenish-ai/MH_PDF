@@ -7,6 +7,10 @@
 
 #include <QCoreApplication>
 #include <QClipboard>
+#include <QJsonObject>
+#include <QJsonDocument>
+#include <QJsonArray>
+#include <QBuffer>
 #include <QElapsedTimer>
 #include <QEventLoop>
 #include <QGuiApplication>
@@ -27,6 +31,7 @@
 #include <QUndoCommand>
 #include <QUrl>
 #include <QUuid>
+#include <QtMath>
 #include <functional>
 #include <utility>
 
@@ -82,16 +87,37 @@ QVariantMap normalizedDisplayRect(const QVariantMap &sourceRect, int rotation) {
             {QStringLiteral("w"), qBound<qreal>(0.0, right - left, 1.0 - left)},
             {QStringLiteral("h"), qBound<qreal>(0.0, bottom - top, 1.0 - top)}};
 }
+
+QString encodeRecoveryImage(const QImage &image) {
+    if (image.isNull())
+        return {};
+    QByteArray bytes;
+    QBuffer buffer(&bytes);
+    if (!buffer.open(QIODevice::WriteOnly) || !image.save(&buffer, "PNG"))
+        return {};
+    return QString::fromLatin1(bytes.toBase64());
+}
+
+QImage decodeRecoveryImage(const QString &value) {
+    if (value.isEmpty())
+        return {};
+    QImage image;
+    image.loadFromData(QByteArray::fromBase64(value.toLatin1()), "PNG");
+    return image;
+}
 }
 
 PdfDocument::PdfDocument(QObject *parent) : QObject(parent) {
     m_pages.setRenderer([this](const PageItem &page, const QSize &size) { return renderBase(page, size); });
     connect(&m_undo, &QUndoStack::canUndoChanged, this, &PdfDocument::historyChanged);
     connect(&m_undo, &QUndoStack::canRedoChanged, this, &PdfDocument::historyChanged);
-    m_autosaveTimer.setInterval(60000);
-    m_autosaveTimer.setSingleShot(false);
+    // Recovery is idle-debounced instead of exporting the full document every
+    // minute while the user is actively drawing/scrolling. This is critical on
+    // older machines and large PDFs. Every new edit restarts the timer.
+    m_autosaveTimer.setInterval(120000);
+    m_autosaveTimer.setSingleShot(true);
     connect(&m_autosaveTimer, &QTimer::timeout, this, &PdfDocument::autosave);
-    m_autosaveTimer.start();
+    m_undo.setUndoLimit(MemoryPolicy::undoLimit());
     newDocument();
     m_modified = false;
     refreshRecoveryState();
@@ -209,6 +235,10 @@ void PdfDocument::markModified(bool value) {
     if (m_modified == value)
         return;
     m_modified = value;
+    if (m_modified)
+        m_autosaveTimer.start();
+    else
+        m_autosaveTimer.stop();
     emit modifiedChanged();
 }
 
@@ -375,9 +405,9 @@ void PdfDocument::ensureOverlay(PageItem *page) {
     if (!page || !page->overlay.isNull())
         return;
     QSize size = (page->points * 1.5).toSize();
-    const int maxDim = MemoryPolicy::maxRenderDimension();
-    size.setWidth(qBound(360, size.width(), maxDim));
-    size.setHeight(qBound(480, size.height(), maxDim));
+    const int maxDim = MemoryPolicy::overlayMaxDimension();
+    size.setWidth(qBound(320, size.width(), maxDim));
+    size.setHeight(qBound(420, size.height(), maxDim));
     page->overlay = QImage(size, QImage::Format_ARGB32_Premultiplied);
     page->overlay.fill(Qt::transparent);
 }
@@ -621,7 +651,7 @@ QVariantMap PdfDocument::engineCapabilities() const { return EngineCapabilities:
 QString PdfDocument::recoveryPath() const {
     const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) + QStringLiteral("/recovery");
     QDir().mkpath(dir);
-    return dir + QStringLiteral("/autosave.pdf");
+    return dir + QStringLiteral("/session.json");
 }
 
 QString PdfDocument::diagnosticLogPath() const { return AppLogger::logFilePath(); }
@@ -634,47 +664,171 @@ void PdfDocument::refreshRecoveryState() {
     }
 }
 
+bool PdfDocument::writeRecoveryJournal() {
+    if (!m_modified || m_pages.count() == 0)
+        return false;
+
+    const QFileInfo journalInfo(recoveryPath());
+    QDir recoveryDir = journalInfo.dir();
+    if (!recoveryDir.exists() && !recoveryDir.mkpath(QStringLiteral(".")))
+        return false;
+    const QString sourcesDirPath = recoveryDir.filePath(QStringLiteral("sources"));
+    QDir().mkpath(sourcesDirPath);
+
+    QHash<QString, QString> recoverySources;
+    QJsonArray pages;
+    for (int i = 0; i < m_pages.count(); ++i) {
+        const PageItem *page = m_pages.page(i);
+        if (!page)
+            continue;
+        QString source = page->sourceId;
+        if (!source.isEmpty() && m_tempInputs.contains(source) && QFileInfo::exists(source)) {
+            QString copy = recoverySources.value(source);
+            if (copy.isEmpty()) {
+                const QString suffix = QFileInfo(source).suffix().isEmpty() ? QStringLiteral("pdf") : QFileInfo(source).suffix();
+                copy = QDir(sourcesDirPath).filePath(QStringLiteral("source-%1.%2")
+                    .arg(recoverySources.size()).arg(suffix));
+                QFile::remove(copy);
+                if (!QFile::copy(source, copy))
+                    return false;
+                recoverySources.insert(source, copy);
+            }
+            source = copy;
+        }
+
+        QJsonObject item;
+        item.insert(QStringLiteral("source"), source);
+        item.insert(QStringLiteral("sourcePage"), page->sourcePage);
+        item.insert(QStringLiteral("width"), page->points.width());
+        item.insert(QStringLiteral("height"), page->points.height());
+        item.insert(QStringLiteral("label"), page->label);
+        item.insert(QStringLiteral("rotation"), page->rotation);
+        item.insert(QStringLiteral("watermarkText"), page->watermarkText);
+        item.insert(QStringLiteral("watermarkFontSize"), page->watermarkFontSize);
+        item.insert(QStringLiteral("watermarkOpacity"), page->watermarkOpacity);
+        item.insert(QStringLiteral("pageNumber"), page->pageNumber);
+        item.insert(QStringLiteral("batesText"), page->batesText);
+        if (!page->base.isNull())
+            item.insert(QStringLiteral("basePng"), encodeRecoveryImage(page->base));
+        if (!page->overlay.isNull())
+            item.insert(QStringLiteral("overlayPng"), encodeRecoveryImage(page->overlay));
+        pages.append(item);
+    }
+
+    QJsonObject root;
+    root.insert(QStringLiteral("format"), QStringLiteral("MaenPDF-Recovery-1"));
+    root.insert(QStringLiteral("originalFile"), m_filePath);
+    root.insert(QStringLiteral("currentPage"), m_currentPage);
+    root.insert(QStringLiteral("pages"), pages);
+
+    const QString tempPath = recoveryPath() + QStringLiteral(".tmp");
+    QFile temp(tempPath);
+    if (!temp.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        return false;
+    const QByteArray payload = QJsonDocument(root).toJson(QJsonDocument::Compact);
+    if (temp.write(payload) != payload.size() || !temp.flush()) {
+        temp.close();
+        QFile::remove(tempPath);
+        return false;
+    }
+    temp.close();
+    QFile::remove(recoveryPath());
+    if (!QFile::rename(tempPath, recoveryPath())) {
+        QFile::remove(tempPath);
+        return false;
+    }
+    return true;
+}
+
 void PdfDocument::autosave() {
     if (!m_modified || m_pages.count() == 0)
         return;
-    const QString target = recoveryPath();
-    const QString temp = target + QStringLiteral(".tmp");
-    QFile::remove(temp);
-    if (exportPdf(temp)) {
-        QPdfDocument check;
-        if (check.load(temp) == QPdfDocument::Error::None && check.pageCount() == m_pages.count()) {
-            QFile::remove(target);
-            if (QFile::rename(temp, target)) {
-                AppLogger::write(QStringLiteral("INFO"), QStringLiteral("Recovery snapshot updated"));
-                refreshRecoveryState();
-                return;
-            }
-        }
+    if (writeRecoveryJournal()) {
+        AppLogger::write(QStringLiteral("INFO"), QStringLiteral("Recovery journal updated"));
+        refreshRecoveryState();
+    } else {
+        AppLogger::write(QStringLiteral("WARN"), QStringLiteral("Recovery journal failed"));
     }
-    QFile::remove(temp);
-    AppLogger::write(QStringLiteral("WARN"), QStringLiteral("Recovery snapshot failed"));
 }
 
 bool PdfDocument::recoverAutosave() {
-    const QString path = recoveryPath();
-    if (!QFile::exists(path))
+    QFile file(recoveryPath());
+    if (!file.open(QIODevice::ReadOnly))
         return false;
-    if (!loadIntoModel(path, false))
+    QJsonParseError parseError;
+    const QJsonDocument json = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !json.isObject())
         return false;
-    m_filePath.clear();
-    m_currentPage = 0;
+    const QJsonObject root = json.object();
+    if (root.value(QStringLiteral("format")).toString() != QStringLiteral("MaenPDF-Recovery-1"))
+        return false;
+    const QJsonArray pages = root.value(QStringLiteral("pages")).toArray();
+    if (pages.isEmpty())
+        return false;
+
+    cleanupTemporaryInputs();
+    m_backends.clear();
+    m_pages.clear();
+    QHash<QString, std::shared_ptr<IPdfBackend>> opened;
+
+    for (const QJsonValue &value : pages) {
+        const QJsonObject item = value.toObject();
+        PageItem page;
+        page.points = QSizeF(item.value(QStringLiteral("width")).toDouble(595.0),
+                             item.value(QStringLiteral("height")).toDouble(842.0));
+        page.label = item.value(QStringLiteral("label")).toString();
+        page.rotation = item.value(QStringLiteral("rotation")).toInt();
+        page.watermarkText = item.value(QStringLiteral("watermarkText")).toString();
+        page.watermarkFontSize = item.value(QStringLiteral("watermarkFontSize")).toInt(42);
+        page.watermarkOpacity = item.value(QStringLiteral("watermarkOpacity")).toInt();
+        page.pageNumber = item.value(QStringLiteral("pageNumber")).toBool();
+        page.batesText = item.value(QStringLiteral("batesText")).toString();
+        page.base = decodeRecoveryImage(item.value(QStringLiteral("basePng")).toString());
+        page.overlay = decodeRecoveryImage(item.value(QStringLiteral("overlayPng")).toString());
+
+        const QString source = item.value(QStringLiteral("source")).toString();
+        const int sourcePage = item.value(QStringLiteral("sourcePage")).toInt(-1);
+        if (page.base.isNull() && !source.isEmpty() && sourcePage >= 0) {
+            auto backend = opened.value(source);
+            if (!backend) {
+                backend = std::make_shared<QtPdfBackend>();
+                QString error;
+                if (!backend->open(source, QString(), &error)) {
+                    m_pages.clear();
+                    m_backends.clear();
+                    emit errorOccurred(QStringLiteral("error.open_pdf"), {});
+                    return false;
+                }
+                opened.insert(source, backend);
+                m_backends.insert(source, backend);
+            }
+            if (sourcePage >= backend->pageCount())
+                return false;
+            page.sourceId = source;
+            page.sourcePage = sourcePage;
+        }
+        m_pages.append(std::move(page));
+    }
+
+    if (!m_pages.count())
+        return false;
+    m_filePath = root.value(QStringLiteral("originalFile")).toString();
+    m_currentPage = qBound(0, root.value(QStringLiteral("currentPage")).toInt(), m_pages.count() - 1);
     m_undo.clear();
     markModified(true);
     emit filePathChanged();
     emit pageCountChanged();
     emit currentPageChanged();
     emit info(QStringLiteral("info.recovered"), {});
-    AppLogger::write(QStringLiteral("INFO"), QStringLiteral("Autosave recovered"));
+    AppLogger::write(QStringLiteral("INFO"), QStringLiteral("Recovery journal restored"));
     return true;
 }
 
 void PdfDocument::discardRecovery() {
-    QFile::remove(recoveryPath());
+    const QFileInfo info(recoveryPath());
+    QDir dir = info.dir();
+    if (dir.exists())
+        dir.removeRecursively();
     refreshRecoveryState();
 }
 
@@ -1016,25 +1170,84 @@ void PdfDocument::addInk(int pageIndex, const QVariantList &points) {
 
 void PdfDocument::addInkStyled(int pageIndex, const QVariantList &points, const QString &color,
                                double widthRatio, int opacity) {
-    if (m_locked || points.size() < 4) return;
-    auto *page = m_pages.page(pageIndex); if (!page) return;
+    if (m_locked || points.size() < 4)
+        return;
+    auto *page = m_pages.page(pageIndex);
+    if (!page)
+        return;
     ensureOverlay(page);
-    const QImage before = page->overlay;
-    QImage after = before;
+
+    // Drawing used to detach and retain a full-page overlay bitmap for every
+    // stroke. On long sessions that could consume hundreds of megabytes and
+    // make the UI appear frozen. Keep only the small pixel patch touched by
+    // this stroke; undo restores that patch and redo replays the vector path.
+    QVector<QPointF> normalizedPoints;
+    normalizedPoints.reserve(points.size() / 2);
+    qreal minX = 1.0, minY = 1.0, maxX = 0.0, maxY = 0.0;
+    for (int i = 0; i + 1 < points.size(); i += 2) {
+        const qreal nx = qBound<qreal>(0.0, points[i].toDouble(), 1.0);
+        const qreal ny = qBound<qreal>(0.0, points[i + 1].toDouble(), 1.0);
+        normalizedPoints.push_back(QPointF(nx, ny));
+        minX = qMin(minX, nx); minY = qMin(minY, ny);
+        maxX = qMax(maxX, nx); maxY = qMax(maxY, ny);
+    }
+    if (normalizedPoints.size() < 2)
+        return;
+
     QColor penColor(color);
-    if (!penColor.isValid()) penColor = QColor(QStringLiteral("#185EB4"));
+    if (!penColor.isValid())
+        penColor = QColor(QStringLiteral("#185EB4"));
     penColor.setAlpha(qBound(5, opacity, 100) * 255 / 100);
-    const qreal penWidth = qMax<qreal>(1.0, qBound(0.0005, widthRatio, 0.05) * after.width());
-    QPainter painter(&after);
-    painter.setRenderHint(QPainter::Antialiasing);
-    painter.setPen(QPen(penColor, penWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-    QPainterPath path;
-    path.moveTo(points[0].toDouble() * after.width(), points[1].toDouble() * after.height());
-    for (int i = 2; i + 1 < points.size(); i += 2)
-        path.lineTo(points[i].toDouble() * after.width(), points[i + 1].toDouble() * after.height());
-    painter.drawPath(path);
-    painter.end();
-    snapshotCommand(pageIndex, before, after, QStringLiteral("Draw"));
+    const qreal boundedWidthRatio = qBound<qreal>(0.0005, widthRatio, 0.05);
+    const qreal penWidth = qMax<qreal>(1.0, boundedWidthRatio * page->overlay.width());
+    const int margin = qMax(3, qCeil(penWidth * 1.5));
+    QRect patchRect(QPoint(qFloor(minX * page->overlay.width()) - margin,
+                           qFloor(minY * page->overlay.height()) - margin),
+                    QPoint(qCeil(maxX * page->overlay.width()) + margin,
+                           qCeil(maxY * page->overlay.height()) + margin));
+    patchRect = patchRect.normalized().intersected(page->overlay.rect());
+    if (patchRect.isEmpty())
+        return;
+    const QImage beforePatch = page->overlay.copy(patchRect);
+
+    auto paintStroke = [](QImage &target, const QVector<QPointF> &stroke, const QColor &strokeColor, qreal ratio) {
+        if (target.isNull() || stroke.size() < 2)
+            return;
+        QPainter painter(&target);
+        painter.setRenderHint(QPainter::Antialiasing);
+        const qreal width = qMax<qreal>(1.0, ratio * target.width());
+        painter.setPen(QPen(strokeColor, width, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        QPainterPath path;
+        path.moveTo(stroke.first().x() * target.width(), stroke.first().y() * target.height());
+        for (qsizetype i = 1; i < stroke.size(); ++i)
+            path.lineTo(stroke[i].x() * target.width(), stroke[i].y() * target.height());
+        painter.drawPath(path);
+    };
+
+    paintStroke(page->overlay, normalizedPoints, penColor, boundedWidthRatio);
+    m_pages.changed(pageIndex);
+    markModified();
+
+    m_undo.push(new LambdaCommand(QStringLiteral("Draw"),
+        [this, pageIndex, patchRect, beforePatch] {
+            if (auto *p = m_pages.page(pageIndex)) {
+                ensureOverlay(p);
+                QPainter restore(&p->overlay);
+                restore.setCompositionMode(QPainter::CompositionMode_Source);
+                restore.drawImage(patchRect.topLeft(), beforePatch);
+                restore.end();
+                m_pages.changed(pageIndex);
+                markModified();
+            }
+        },
+        [this, pageIndex, normalizedPoints, penColor, boundedWidthRatio, paintStroke] {
+            if (auto *p = m_pages.page(pageIndex)) {
+                ensureOverlay(p);
+                paintStroke(p->overlay, normalizedPoints, penColor, boundedWidthRatio);
+                m_pages.changed(pageIndex);
+                markModified();
+            }
+        }, true));
 }
 
 void PdfDocument::addImage(int pageIndex, const QString &path, double x, double y, double width, double height) {

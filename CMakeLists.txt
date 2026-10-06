@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(MaenPDF VERSION 7.2.1 LANGUAGES CXX)
+project(MaenPDF VERSION 7.3.0 LANGUAGES CXX)
 
 include(GNUInstallDirs)
 
@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 6.11 REQUIRED COMPONENTS Core Gui Quick Qml QuickControls2 Pdf)
+find_package(Qt6 6.11 REQUIRED COMPONENTS Core Gui Quick Qml QuickControls2 Pdf Concurrent)
 qt_standard_project_setup(REQUIRES 6.11)
 
 qt_add_executable(MaenPDF
@@ -44,7 +44,7 @@ qt_add_resources(MaenPDF maenpdf_i18n
 )
 
 target_link_libraries(MaenPDF PRIVATE
-    Qt6::Core Qt6::Gui Qt6::Quick Qt6::Qml Qt6::QuickControls2 Qt6::Pdf
+    Qt6::Core Qt6::Gui Qt6::Quick Qt6::Qml Qt6::QuickControls2 Qt6::Pdf Qt6::Concurrent
 )
 
 if(NOT ANDROID)
@@ -72,8 +72,8 @@ if(ANDROID)
     set_property(TARGET MaenPDF PROPERTY QT_ANDROID_MIN_SDK_VERSION 28)
     set_property(TARGET MaenPDF PROPERTY QT_ANDROID_TARGET_SDK_VERSION 36)
     set_property(TARGET MaenPDF PROPERTY QT_ANDROID_COMPILE_SDK_VERSION 36)
-    set_property(TARGET MaenPDF PROPERTY QT_ANDROID_VERSION_CODE 70201)
-    set_property(TARGET MaenPDF PROPERTY QT_ANDROID_VERSION_NAME "7.2.1")
+    set_property(TARGET MaenPDF PROPERTY QT_ANDROID_VERSION_CODE 70300)
+    set_property(TARGET MaenPDF PROPERTY QT_ANDROID_VERSION_NAME "7.3.0")
 endif()
 
 if(ANDROID)

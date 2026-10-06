@@ -1,47 +1,29 @@
-# MaenPDF 7.2.1 — Build Status
+# MaenPDF 7.3.0 — Build Status
 
 ## Local verification
-This bundle is required to pass all source-level release gates before packaging:
+The source bundle must pass all source-level release gates before packaging:
 - source/reliability audit;
 - EN/AR localization parity audit;
 - release/packaging audit;
 - engine v7 architecture audit;
 - security audit;
 - performance audit;
+- interaction audit;
 - open-source/brand audit;
-- interaction-specific static audit;
-- JSON, XML and GitHub Actions YAML parsing.
+- JSON/XML/YAML parsing and manifest verification.
 
-Run:
+Run `python scripts/preflight.py`.
 
-```bash
-python scripts/preflight.py
-```
-
-## 7.2 interaction changes
-- Single-page `Flickable` replaced by a virtualized continuous `ListView` document surface.
-- Real PDF text selection added through Qt PDF selection geometry.
-- Selection copy and multi-rectangle text highlighting added.
-- Live draw preview and styled ink commit added.
-- Crop and redaction now use staged preview / Apply / Cancel interaction.
-- Wheel scrolling is explicitly forwarded even when the page interaction layer owns the pointer.
-- Page renders/thumbnails are asynchronous; Qt PDF backend calls are mutex-serialized.
-- Long local operations pump non-input events to avoid Windows `Not Responding` during legitimate work.
-- CI uses a three-page fixture and a dedicated interaction smoke mode before installer generation.
+## 7.3 performance changes
+- Incremental and spatially-decimated ink preview; no full stroke-array clone per pointer event.
+- Bounded undo history and reduced/quantized render cache.
+- Serialized shared render cache for asynchronous image requests.
+- Idle-debounced lightweight recovery journal replaces timer-driven full-PDF recovery export.
+- Heavy optional local PDF tools have Qt Concurrent background entry points and a busy-state overlay.
+- Windows uses accelerated rendering by default with Safe Graphics fallback.
+- Windows interaction smoke includes a 2,000-point committed ink timing check.
+- Standard CI no longer uploads a Windows Portable artifact.
+- Standard Android CI builds/verifies one installable test APK; the production Android Release workflow builds the persistently signed APK and Play AAB.
 
 ## Native build authority
-This working environment does not include the complete Qt 6.11 Windows and Android kits. GitHub Actions remains the authoritative native compile, package and runtime gate after the source bundle is uploaded.
-
-## Android
-The standard CI workflow continues to produce `MaenPDF-Installable-Test.apk` with an ephemeral CI-only signing key. The AAB remains a validation artifact; production Play signing stays isolated in `.github/workflows/play-release.yml`.
-
-## GitHub Actions Run #15 — v7.2.1 stabilization
-
-- Source/localization/release audit: passed.
-- Android signed APK + AAB pipeline: passed.
-- Windows configure/build/runtime deployment: passed.
-- Native Windows startup smoke: passed.
-- PDF-open workspace smoke: passed.
-- Failure was isolated to the new interaction smoke test: `INTERACTION_SMOKE_TEXT_SELECTION_FAILED`.
-- v7.2.1 hardens `QtPdfBackend::textSelection()` so mouse drags that begin/end in page whitespace snap to the nearest PDF text geometry, with a bounded full-text fallback when the drag encloses the text.
-- The interaction audit now guards this whitespace-endpoint behavior to prevent regression.
+This working environment does not include the complete Qt 6.11 Windows and Android kits. GitHub Actions remains the authoritative native compile/package/runtime gate after this source bundle is uploaded. No bundle should be described as GitHub-green until that run succeeds.

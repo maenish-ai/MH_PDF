@@ -20,6 +20,10 @@
 #include <QTemporaryDir>
 #include <QUrl>
 #include <QtMath>
+#include <utility>
+#include <QtConcurrent>
+#include <QPointer>
+#include <QMetaObject>
 
 namespace {
 
@@ -466,4 +470,110 @@ QStringList PdfToolsService::ocrLanguages() {
             languages << trimmed;
     }
     return languages;
+}
+
+
+bool PdfToolsService::beginAsync(const QString &operation, std::function<void()> task) {
+    bool expected = false;
+    if (!m_busy.compare_exchange_strong(expected, true))
+        return false;
+    m_currentOperation = operation;
+    emit busyChanged();
+    QPointer<PdfToolsService> guard(this);
+    QtConcurrent::run([guard, task = std::move(task)]() mutable {
+        if (!guard)
+            return;
+        task();
+        if (guard)
+            QMetaObject::invokeMethod(guard.data(), [guard] { if (guard) guard->finishAsync(); }, Qt::QueuedConnection);
+    });
+    return true;
+}
+
+void PdfToolsService::finishAsync() {
+    m_currentOperation.clear();
+    m_busy.store(false);
+    emit busyChanged();
+}
+
+bool PdfToolsService::startOptimizePdf(const QString &input, const QString &output) {
+    return beginAsync(QStringLiteral("optimize"), [this, input, output] { optimizePdf(input, output); });
+}
+bool PdfToolsService::startLinearizePdf(const QString &input, const QString &output) {
+    return beginAsync(QStringLiteral("linearize"), [this, input, output] { linearizePdf(input, output); });
+}
+bool PdfToolsService::startRepairPdf(const QString &input, const QString &output) {
+    return beginAsync(QStringLiteral("repair"), [this, input, output] { repairPdf(input, output); });
+}
+bool PdfToolsService::startDecryptPdf(const QString &input, const QString &output, const QString &password) {
+    return beginAsync(QStringLiteral("decrypt"), [this, input, output, password] { decryptPdf(input, output, password); });
+}
+bool PdfToolsService::startSplitPdf(const QString &input, const QString &outputDirectory, int pagesPerFile) {
+    return beginAsync(QStringLiteral("split"), [this, input, outputDirectory, pagesPerFile] { splitPdf(input, outputDirectory, pagesPerFile); });
+}
+bool PdfToolsService::startExportImages(const QString &input, const QString &outputDirectory, int dpi, const QString &password) {
+    return beginAsync(QStringLiteral("exportImages"), [this, input, outputDirectory, dpi, password] { exportImages(input, outputDirectory, dpi, password); });
+}
+bool PdfToolsService::startImageToPdf(const QString &image, const QString &output) {
+    return beginAsync(QStringLiteral("imageToPdf"), [this, image, output] { imageToPdf(image, output); });
+}
+bool PdfToolsService::startSafeFlattenPdf(const QString &input, const QString &output, int dpi, const QString &password) {
+    return beginAsync(QStringLiteral("safeFlatten"), [this, input, output, dpi, password] { safeFlattenPdf(input, output, dpi, password); });
+}
+bool PdfToolsService::startComparePdf(const QString &first, const QString &second, int maxPages) {
+    return beginAsync(QStringLiteral("compare"), [this, first, second, maxPages] {
+        const QVariantList result = comparePdf(first, second, maxPages);
+        QPointer<PdfToolsService> guard(this);
+        QMetaObject::invokeMethod(this, [guard, result] { if (guard) emit guard->compareReady(result); }, Qt::QueuedConnection);
+    });
+}
+bool PdfToolsService::startOcrToSearchablePdf(const QString &input, const QString &output, const QString &languages, int dpi, const QString &password) {
+    return beginAsync(QStringLiteral("ocr"), [this, input, output, languages, dpi, password] { ocrToSearchablePdf(input, output, languages, dpi, password); });
+}
+bool PdfToolsService::startOfficeToPdf(const QString &input, const QString &outputDirectory) {
+    return beginAsync(QStringLiteral("office"), [this, input, outputDirectory] { officeToPdf(input, outputDirectory); });
+}
+bool PdfToolsService::startCheckPdf(const QString &input) {
+    return beginAsync(QStringLiteral("check"), [this, input] {
+        const QString report = checkPdf(input);
+        QPointer<PdfToolsService> guard(this);
+        QMetaObject::invokeMethod(this, [guard, report] { if (guard) emit guard->reportReady(report); }, Qt::QueuedConnection);
+    });
+}
+
+
+bool PdfToolsService::batchOptimize(const QStringList &inputs, const QString &outputDirectory) {
+    if (m_qpdf.isEmpty()) { fail(QStringLiteral("tools.error.qpdf_missing")); return false; }
+    const QString dirPath = normalizePath(outputDirectory);
+    QDir dir(dirPath);
+    if (inputs.isEmpty() || dirPath.isEmpty() || (!dir.exists() && !dir.mkpath(QStringLiteral(".")))) {
+        fail(QStringLiteral("tools.error.path"));
+        return false;
+    }
+    int completed = 0;
+    for (const QString &entry : inputs) {
+        const QString input = normalizePath(entry);
+        if (input.isEmpty() || !QFileInfo::exists(input))
+            continue;
+        const QFileInfo info(input);
+        QString outName = info.completeBaseName() + QStringLiteral("-optimized.pdf");
+        const QString output = dir.filePath(outName);
+        const bool ok = runProcess(m_qpdf, {QStringLiteral("--object-streams=generate"), QStringLiteral("--compress-streams=y"),
+                                            QStringLiteral("--recompress-flate"), QStringLiteral("--linearize"), input, output}, 180000);
+        if (!ok) {
+            fail(QStringLiteral("tools.error.process"));
+            return false;
+        }
+        ++completed;
+    }
+    if (completed == 0) {
+        fail(QStringLiteral("tools.error.input_missing"));
+        return false;
+    }
+    done(QStringLiteral("tools.done.batch_optimize"), {completed});
+    return true;
+}
+
+bool PdfToolsService::startBatchOptimize(const QStringList &inputs, const QString &outputDirectory) {
+    return beginAsync(QStringLiteral("batchOptimize"), [this, inputs, outputDirectory] { batchOptimize(inputs, outputDirectory); });
 }

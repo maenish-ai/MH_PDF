@@ -311,5 +311,14 @@
   "tools.error.security_scheme": "نظام حماية الملف غير مدعوم.",
   "tools.error.temp": "تعذر إنشاء مساحة مؤقتة آمنة للعمل.",
   "tools.error.tesseract_missing": "محرك التعرف الضوئي المحلي الاختياري غير مثبت.",
-  "tools.error.write_pdf": "تعذرت كتابة ملف الإخراج."
+  "tools.error.write_pdf": "تعذرت كتابة ملف الإخراج.",
+  "action.safe_graphics": "وضع الرسوميات الآمن",
+  "preferences.safe_graphics_note": "استخدم الرسوميات البرمجية فقط إذا كانت بطاقة الرسوميات أو تعريفها غير مستقرة. أعد تشغيل MaenPDF بعد تغيير هذا الخيار.",
+  "status.processing": "جارٍ التنفيذ…",
+  "status.ui_responsive": "تعمل المهمة في الخلفية حتى تبقى الواجهة مستجيبة.",
+  "status.wait_operation": "يرجى الانتظار حتى تنتهي العملية المحلية الحالية قبل إغلاق MaenPDF.",
+  "action.batch_optimize": "تحسين مجموعة ملفات بي دي إف",
+  "file.batch_optimize": "اختر ملفات بي دي إف للتحسين",
+  "tools.done.batch_optimize": "تم تحسين %1 من ملفات بي دي إف.",
+  "action.sanitize_privacy": "تنظيف الخصوصية وتسطيح الملف"
 }

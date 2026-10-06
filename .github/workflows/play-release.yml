@@ -1,4 +1,4 @@
-name: MaenPDF Play Release
+name: MaenPDF Android Release
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ env:
   ANDROID_NDK: '27.2.12479018'
 
 jobs:
-  signed-play-bundle:
+  signed-android-release:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7.0.1
@@ -75,22 +75,43 @@ jobs:
             -DQT_ANDROID_BUILD_ALL_ABIS=TRUE \
             -DQT_ANDROID_SIGN_AAB=ON \
             -DQT_ANDROID_SIGN_APK=ON
-      - name: Build signed AAB and APK
+      - name: Build signed release APK first
         env:
           QT_ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/maenpdf-upload.jks
           QT_ANDROID_KEYSTORE_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           QT_ANDROID_KEYSTORE_STORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           QT_ANDROID_KEYSTORE_KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          cmake --build build-play --target aab --parallel
           cmake --build build-play --target apk --parallel
-      - name: Collect signed artifacts
+
+      - name: Preserve and verify final APK
         run: |
-          mkdir -p dist-play
-          find build-play -type f \( -name '*.aab' -o -name '*.apk' \) -exec cp -v {} dist-play/ \;
-          test -n "$(find dist-play -type f -name '*.aab' -print -quit)"
+          set -euo pipefail
+          mkdir -p dist-release
+          apk="$(find build-play -type f -name '*-signed.apk' -print -quit)"
+          test -n "$apk"
+          "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$apk"
+          cp -v "$apk" dist-release/MaenPDF-Android-Release.apk
+
+      - name: Build signed Play AAB
+        env:
+          QT_ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/maenpdf-upload.jks
+          QT_ANDROID_KEYSTORE_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          QT_ANDROID_KEYSTORE_STORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          QT_ANDROID_KEYSTORE_KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: cmake --build build-play --target aab --parallel
+
+      - name: Preserve final AAB
+        run: |
+          set -euo pipefail
+          aab="$(find build-play -type f -name '*.aab' -print -quit)"
+          test -n "$aab"
+          cp -v "$aab" dist-release/MaenPDF-Android-Play.aab
+          test -s dist-release/MaenPDF-Android-Release.apk
+          test -s dist-release/MaenPDF-Android-Play.aab
+
       - uses: actions/upload-artifact@v7.0.1
         with:
-          name: MaenPDF-Play-signed
-          path: dist-play/
+          name: MaenPDF-Android-Release
+          path: dist-release/
           if-no-files-found: error

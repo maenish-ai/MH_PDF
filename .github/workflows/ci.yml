@@ -78,7 +78,7 @@ jobs:
             -BuildExe "build/Release/MaenPDF.exe" `
             -DistDir "dist"
 
-      - name: Smoke test portable MaenPDF with native Windows platform
+      - name: Smoke test staged MaenPDF with native Windows platform
         shell: pwsh
         run: |
           # Do NOT set QT_QPA_PLATFORM=offscreen here. This must exercise
@@ -105,7 +105,7 @@ jobs:
           }
           Stop-Process -Id $proc.Id -Force
 
-      - name: Smoke test portable MaenPDF opening PDF fixture
+      - name: Smoke test staged MaenPDF opening PDF fixture
         shell: pwsh
         run: |
           # Exercise the document workspace and lazy delegates, not only Home.
@@ -284,14 +284,8 @@ jobs:
           path: installer-output/MaenPDF-Setup.exe
           if-no-files-found: error
 
-      - uses: actions/upload-artifact@v7.0.1
-        with:
-          name: MaenPDF-Windows-Portable
-          path: dist/
-          if-no-files-found: error
-
   android-play:
-    name: Android APK/AAB (ARM64 + ARMv7)
+    name: Android installable CI APK (ARM64 + ARMv7)
     needs: source-audit
     runs-on: ubuntu-24.04
     steps:
@@ -369,42 +363,23 @@ jobs:
           QT_ANDROID_KEYSTORE_KEY_PASS: maenpdf-ci-test
         run: cmake --build build-android --target apk --parallel
 
-      # Qt's AAB target may regenerate the Android output directory and replace
-      # the previously signed APK with an unsigned intermediate. Preserve the
-      # verified installable APK before invoking the AAB target.
-      - name: Verify and preserve signed test APK
+      - name: Verify and preserve installable CI APK
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p dist-android
-
           signed_apk="$(find build-android -type f -name '*-signed.apk' -print -quit)"
           if [ -z "$signed_apk" ]; then
             echo "The signed APK output was not produced." >&2
             find build-android -type f -name '*.apk' -print >&2
             exit 1
           fi
-
           "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$signed_apk"
-          cp -v "$signed_apk" dist-android/MaenPDF-Installable-Test.apk
-          "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner" verify --verbose dist-android/MaenPDF-Installable-Test.apk
-
-      - name: Build AAB for validation
-        run: cmake --build build-android --target aab --parallel
-
-      - name: Collect AAB validation artifact
-        shell: bash
-        run: |
-          set -euo pipefail
-          aab="$(find build-android -type f -name '*.aab' -print -quit)"
-          if [ -z "$aab" ]; then
-            echo "AAB was not produced." >&2
-            exit 1
-          fi
-          cp -v "$aab" dist-android/MaenPDF-For-Play-Validation.aab
+          cp -v "$signed_apk" dist-android/MaenPDF-Android-CI-Test.apk
+          "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner" verify --verbose dist-android/MaenPDF-Android-CI-Test.apk
 
       - uses: actions/upload-artifact@v7.0.1
         with:
-          name: MaenPDF-Android-Installable-Test
+          name: MaenPDF-Android-CI-Test
           path: dist-android/
           if-no-files-found: error

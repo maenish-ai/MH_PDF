@@ -2,6 +2,7 @@
 #include "MemoryPolicy.h"
 
 #include <QPainter>
+#include <QMutexLocker>
 #include <QTransform>
 #include <QUuid>
 #include <utility>
@@ -42,8 +43,11 @@ void PageModel::setProviderNamespace(const QString &value) {
 }
 
 void PageModel::refreshMemoryPolicy() {
+    QMutexLocker locker(&m_cacheMutex);
     m_cacheBudget = MemoryPolicy::renderCacheBudgetBytes();
-    clearCache();
+    m_cache.clear();
+    m_lru.clear();
+    m_cacheBytes = 0;
 }
 
 void PageModel::ensureIdentity(PageItem &page) {
@@ -143,6 +147,7 @@ void PageModel::touchCacheKey(const QString &key) const {
 void PageModel::putCache(const QString &key, const QImage &image) const {
     if (key.isEmpty() || image.isNull())
         return;
+    QMutexLocker locker(&m_cacheMutex);
     const qint64 bytes = image.sizeInBytes();
     if (bytes <= 0 || bytes > m_cacheBudget / 2)
         return;
@@ -191,13 +196,23 @@ QImage PageModel::renderPage(int row, const QSize &requestedSize) const {
     QSize size = requestedSize;
     if (!size.isValid() || size.width() < 2 || size.height() < 2)
         size = defaultPixelSize(page);
-    size.setWidth(qBound(64, size.width(), MemoryPolicy::maxRenderDimension()));
-    size.setHeight(qBound(64, size.height(), MemoryPolicy::maxRenderDimension()));
+    const int maxDim = MemoryPolicy::maxRenderDimension();
+    size.setWidth(qBound(64, size.width(), maxDim));
+    size.setHeight(qBound(64, size.height(), maxDim));
+    // Bucket nearby zoom requests so wheel/pinch zoom does not create a new
+    // full-size cached bitmap for every one-pixel size change.
+    const int bucket = 48;
+    size.setWidth(qMin(maxDim, qMax(64, ((size.width() + bucket / 2) / bucket) * bucket)));
+    size.setHeight(qMin(maxDim, qMax(64, ((size.height() + bucket / 2) / bucket) * bucket)));
 
     const QString key = QStringLiteral("%1:%2:%3x%4").arg(page.uid).arg(page.revision).arg(size.width()).arg(size.height());
-    if (const auto it = m_cache.find(key); it != m_cache.end()) {
-        touchCacheKey(key);
-        return it->image;
+    {
+        QMutexLocker locker(&m_cacheMutex);
+        if (const auto it = m_cache.find(key); it != m_cache.end()) {
+            const QImage cached = it->image;
+            touchCacheKey(key);
+            return cached;
+        }
     }
 
     QImage base;
@@ -260,12 +275,14 @@ QImage PageModel::renderPage(int row, const QSize &requestedSize) const {
 }
 
 QVariantMap PageModel::cacheStats() const {
+    QMutexLocker locker(&m_cacheMutex);
     return {{QStringLiteral("entries"), m_cache.size()},
             {QStringLiteral("bytes"), m_cacheBytes},
             {QStringLiteral("budgetBytes"), m_cacheBudget}};
 }
 
 void PageModel::clearCache() const {
+    QMutexLocker locker(&m_cacheMutex);
     m_cache.clear();
     m_lru.clear();
     m_cacheBytes = 0;

@@ -11,6 +11,7 @@ AppSettings::AppSettings(QObject *parent) : QObject(parent) {
     QSettings settings;
     m_darkMode = settings.value(QStringLiteral("ui/darkMode"), false).toBool();
     m_lowMemoryMode = settings.value(QStringLiteral("performance/lowMemory"), false).toBool();
+    m_safeGraphics = settings.value(QStringLiteral("performance/safeGraphics"), false).toBool();
     m_recentFiles = settings.value(QStringLiteral("recent/files")).toStringList();
     m_supportUrl = settings.value(QStringLiteral("community/supportUrl"),
                                   qEnvironmentVariable("MAENPDF_SUPPORT_URL")).toString().trimmed();
@@ -72,6 +73,14 @@ void AppSettings::setLowMemoryMode(bool value) {
     m_lowMemoryMode = value;
     QSettings().setValue(QStringLiteral("performance/lowMemory"), value);
     emit lowMemoryModeChanged();
+}
+
+void AppSettings::setSafeGraphics(bool value) {
+    if (m_safeGraphics == value)
+        return;
+    m_safeGraphics = value;
+    QSettings().setValue(QStringLiteral("performance/safeGraphics"), value);
+    emit safeGraphicsChanged();
 }
 
 void AppSettings::persistRecentFiles() {
@@ -136,10 +145,12 @@ void AppSettings::resetApplicationSettings(bool keepLanguage) {
 
     m_darkMode = false;
     m_lowMemoryMode = false;
+    m_safeGraphics = false;
     m_recentFiles.clear();
     m_supportUrl = support.trimmed();
     emit darkModeChanged();
     emit lowMemoryModeChanged();
+    emit safeGraphicsChanged();
     emit recentFilesChanged();
     emit supportUrlChanged();
     emit settingsReset();
