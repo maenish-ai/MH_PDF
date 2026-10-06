@@ -1,7 +1,7 @@
-# MaenPDF 7.1.0 — Build Status
+# MaenPDF 7.2.0 — Build Status
 
 ## Local verification
-All source-level release gates in this bundle pass:
+This bundle is required to pass all source-level release gates before packaging:
 - source/reliability audit;
 - EN/AR localization parity audit;
 - release/packaging audit;
@@ -9,30 +9,28 @@ All source-level release gates in this bundle pass:
 - security audit;
 - performance audit;
 - open-source/brand audit;
+- interaction-specific static audit;
 - JSON, XML and GitHub Actions YAML parsing.
 
-Run locally before every push:
+Run:
 
 ```bash
 python scripts/preflight.py
 ```
 
+## 7.2 interaction changes
+- Single-page `Flickable` replaced by a virtualized continuous `ListView` document surface.
+- Real PDF text selection added through Qt PDF selection geometry.
+- Selection copy and multi-rectangle text highlighting added.
+- Live draw preview and styled ink commit added.
+- Crop and redaction now use staged preview / Apply / Cancel interaction.
+- Wheel scrolling is explicitly forwarded even when the page interaction layer owns the pointer.
+- Page renders/thumbnails are asynchronous; Qt PDF backend calls are mutex-serialized.
+- Long local operations pump non-input events to avoid Windows `Not Responding` during legitimate work.
+- CI uses a three-page fixture and a dedicated interaction smoke mode before installer generation.
+
 ## Native build authority
-This working environment does not contain the full Qt 6.11 desktop/Android SDK, so the GitHub Actions workflow remains the authoritative native compilation, packaging and runtime smoke-test gate.
-
-## Proven baseline
-GitHub Run #11 was fully green for MaenPDF 6.0.11. Run #12 for MaenPDF 7.0.0 proved Source Audit and Android green, and exposed a Windows QML startup property error. The 7.0.1 stabilization removed that error and added a real PDF-open smoke test so lazy QML delegates are instantiated during CI.
-
-## 7.1.0 Professional Foundation changes
-- Windows installer now performs a clean application-directory replacement on every update, preventing obsolete DLLs/plugins from surviving an upgrade.
-- A one-time settings-generation migration clears incompatible pre-7.1 application state without touching user PDF documents.
-- Future 7.1+ installs preserve compatible settings unless the user chooses the installer reset task.
-- Qt desktop builds now link Qt Widgets and Qt Print Support and expose Print, Print Current Page and Print Preview.
-- `windeployqt` packaging explicitly validates `Qt6Widgets.dll` and `Qt6PrintSupport.dll` in addition to the existing Qt PDF and VC143 runtime checks.
-- CI installer smoke testing now simulates stale legacy settings and an obsolete application file and verifies that both are removed by the clean-upgrade path.
-- The desktop menu surface now includes File, Edit, View, Document, Pages, Comment, Forms, Protect, Convert, Tools, Window, Language and Help.
-- Ctrl+K command palette is searchable.
-- Settings use an explicit schema version.
+This working environment does not include the complete Qt 6.11 Windows and Android kits. GitHub Actions remains the authoritative native compile, package and runtime gate after the source bundle is uploaded.
 
 ## Android
-The standard CI workflow continues to produce `MaenPDF-Installable-Test.apk` with an ephemeral CI-only signing key and verifies it with `apksigner`. The AAB remains a validation artifact; production Play signing stays isolated in `.github/workflows/play-release.yml` with persistent secrets.
+The standard CI workflow continues to produce `MaenPDF-Installable-Test.apk` with an ephemeral CI-only signing key. The AAB remains a validation artifact; production Play signing stays isolated in `.github/workflows/play-release.yml`.

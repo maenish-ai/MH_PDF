@@ -21,3 +21,10 @@ A later writer backend must preserve and edit PDF object/content streams for tru
 
 ## Non-negotiable public-release tests
 Generated/scanned/encrypted/malformed/RTL/mixed-size/large-document corpus, cross-reader interoperability, save/rollback, crash recovery, low-disk-space behavior, Android lifecycle and document picker, accessibility, parser fuzzing, memory budgets and signed-store package validation.
+
+## 7.2 interaction layer
+The document workspace is a virtualized vertical `ListView`. Each visible page delegate requests a page render at its displayed size and owns only transient interaction state. Persistent edits are committed to `PdfDocument` and participate in the undo stack.
+
+Source-backed PDF text selection is provided by `IPdfBackend::textSelection()` and the Qt PDF implementation delegates to `QPdfDocument::getSelection()`. Selection bounds are normalized and mapped back through page rotations before QML renders them. Crop and redaction are staged in QML and are committed only after explicit Apply. Ink is previewed in a QML Canvas and committed as one styled stroke.
+
+Page images load asynchronously. `QtPdfBackend` serializes access to its `QPdfDocument`; render calls use page snapshots and closed tabs are briefly retired before deletion to protect in-flight image-provider requests.

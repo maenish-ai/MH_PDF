@@ -3,14 +3,22 @@ import sys
 
 
 def build_pdf() -> bytes:
-    stream = b"BT /F1 18 Tf 72 770 Td (MaenPDF CI smoke test) Tj ET\n"
+    streams = [
+        b"BT /F1 18 Tf 72 770 Td (MaenPDF interaction smoke page one) Tj ET\n",
+        b"BT /F1 18 Tf 72 770 Td (MaenPDF interaction smoke page two) Tj ET\n",
+        b"BT /F1 18 Tf 72 770 Td (MaenPDF interaction smoke page three) Tj ET\n",
+    ]
     objects = [
         b"<< /Type /Catalog /Pages 2 0 R >>",
-        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R] /Count 3 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 6 0 R >> >> /Contents 7 0 R >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 6 0 R >> >> /Contents 8 0 R >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 6 0 R >> >> /Contents 9 0 R >>",
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-        b"<< /Length %d >>\nstream\n" % len(stream) + stream + b"endstream",
     ]
+    for stream in streams:
+        objects.append(b"<< /Length %d >>\nstream\n" % len(stream) + stream + b"endstream")
+
     out = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
     offsets = [0]
     for index, body in enumerate(objects, 1):
@@ -38,9 +46,9 @@ def main() -> int:
     path.parent.mkdir(parents=True, exist_ok=True)
     data = build_pdf()
     path.write_bytes(data)
-    if not data.startswith(b"%PDF-") or b"startxref" not in data:
+    if not data.startswith(b"%PDF-") or b"/Count 3" not in data or b"startxref" not in data:
         raise RuntimeError("generated smoke PDF is invalid")
-    print(f"Wrote {path} ({len(data)} bytes)")
+    print(f"Wrote {path} ({len(data)} bytes, 3 pages)")
     return 0
 
 

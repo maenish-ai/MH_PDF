@@ -12,7 +12,7 @@ checks={
  'C++ delimiter balance':all((f.read_text(encoding='utf-8').count('{')==f.read_text(encoding='utf-8').count('}') and f.read_text(encoding='utf-8').count('(')==f.read_text(encoding='utf-8').count(')')) for f in list((root/'core').glob('*.cpp'))+list((root/'app').glob('*.cpp'))),
  'safe atomic save':'atomicExportPdf' in cpp and '.maenpdf-backup' in cpp and 'QFile::rename(temp, target)' in cpp,
  'save verification':'check.pageCount() != m_pages.count()' in cpp,
- 'security process timeout':'waitForFinished(60000)' in cpp and 'waitForFinished(timeoutMs)' in tools,
+ 'security process timeout':'securityTimer.elapsed() < 60000' in cpp and 'timer.elapsed() < timeoutMs' in tools and 'process.kill()' in tools,
  'unique security temp':'QTemporaryFile' in cpp and 'QTemporaryDir' in tools,
  'recovery timer':'m_autosaveTimer.setInterval(60000)' in cpp,
  'capability contract':'EngineCapabilities::current()' in cpp,
@@ -42,6 +42,10 @@ checks={
  'print commands wired':'printService.printDocument' in qml and 'printService.printPreview' in qml,
  'command palette searchable':'dialog.command_search' in qml and 'commandSearch' in qml,
  'preferences settings schema':'settingsSchemaVersion' in qml and 'resetApplicationSettings' in qml,
+ 'continuous page viewer':'id: documentView' in qml and 'ListView.Vertical' in qml and 'onContentYChanged:' in qml,
+ 'real text selection':'textSelection(' in h and 'getSelection(page' in (root/'core/QtPdfBackend.cpp').read_text(encoding='utf-8') and 'selectedTextRects' in qml,
+ 'live drawing preview':'Canvas {' in qml and 'addInkStyled' in h and 'liveInk.requestPaint()' in qml,
+ 'crop and redact staged apply':'pendingActionRect' in qml and 'applyPendingAction()' in qml,
 }
 for name,ok in checks.items(): print(('PASS' if ok else 'FAIL'),name)
 sys.exit(0 if all(checks.values()) else 1)

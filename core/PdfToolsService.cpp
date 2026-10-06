@@ -2,6 +2,8 @@
 #include "MemoryPolicy.h"
 
 #include <QCoreApplication>
+#include <QElapsedTimer>
+#include <QEventLoop>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -107,7 +109,13 @@ bool PdfToolsService::runProcess(const QString &program, const QStringList &argu
     process.start(program, arguments);
     if (!process.waitForStarted(5000))
         return false;
-    if (!process.waitForFinished(timeoutMs)) {
+    QElapsedTimer timer;
+    timer.start();
+    while (process.state() != QProcess::NotRunning && timer.elapsed() < timeoutMs) {
+        process.waitForFinished(35);
+        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 10);
+    }
+    if (process.state() != QProcess::NotRunning) {
         process.kill();
         process.waitForFinished(3000);
         return false;
@@ -178,6 +186,7 @@ bool PdfToolsService::writeFlattened(QPdfDocument &document, const QString &outp
             return false;
         }
         painter.drawImage(QRect(0, 0, writer.width(), writer.height()), image);
+        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 8);
     }
     painter.end();
     return QFileInfo(output).exists() && QFileInfo(output).size() > 0;
@@ -260,6 +269,7 @@ bool PdfToolsService::exportImages(const QString &inputPath, const QString &outp
         const QImage image = document.render(page, renderSize(document, page, qBound(72, dpi, 300)));
         const QString name = dir.filePath(QStringLiteral("page-%1.png").arg(page + 1, 4, 10, QLatin1Char('0')));
         if (image.isNull() || !image.save(name, "PNG")) { fail(QStringLiteral("tools.error.image_write")); return false; }
+        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 8);
     }
     done(QStringLiteral("tools.done.images"), {document.pageCount()});
     return true;
@@ -346,12 +356,15 @@ QVariantList PdfToolsService::comparePdf(const QString &firstPath, const QString
                 totalDifference += qAbs(qBlue(arow[x]) - qBlue(brow[x]));
                 samples += 3;
             }
+            if ((y & 63) == 0)
+                QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 4);
         }
         const double percent = samples ? (100.0 * totalDifference / (255.0 * samples)) : 0.0;
         row.insert(QStringLiteral("differencePercent"), percent);
         row.insert(QStringLiteral("same"), percent < 0.35);
         row.insert(QStringLiteral("missingPage"), false);
         results.push_back(row);
+        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 8);
     }
     done(QStringLiteral("tools.done.compare"), {results.size()});
     return results;
@@ -418,6 +431,7 @@ bool PdfToolsService::ocrToSearchablePdf(const QString &inputPath, const QString
         const QString pagePdf = base + QStringLiteral(".pdf");
         if (!QFileInfo::exists(pagePdf)) { fail(QStringLiteral("tools.error.ocr_process"), {page + 1}); return false; }
         pagePdfs << pagePdf;
+        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 8);
     }
     const bool ok = mergePdfs(pagePdfs, output, temporary.path());
     if (ok) done(QStringLiteral("tools.done.ocr"), {document.pageCount()}); else fail(QStringLiteral("tools.error.merge"));

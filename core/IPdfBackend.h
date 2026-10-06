@@ -4,6 +4,8 @@
 #include <QSize>
 #include <QImage>
 #include <QVariantList>
+#include <QVariantMap>
+#include <QPointF>
 
 class IPdfBackend {
 public:
@@ -15,4 +17,5 @@ public:
     virtual QImage render(int page, const QSize &pixels) const = 0;
     virtual QString pageText(int page) const = 0;
     virtual QVariantList search(const QString &needle, int maxResults = 200) const = 0;
+    virtual QVariantMap textSelection(int page, const QPointF &start, const QPointF &end) const = 0;
 };

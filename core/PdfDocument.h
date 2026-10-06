@@ -66,9 +66,11 @@ public:
     Q_INVOKABLE void addImage(int page, const QString &path, double x = .15, double y = .15, double w = .5, double h = .5);
     Q_INVOKABLE void addText(int page, double x, double y, const QString &text, int fontSize = 18);
     Q_INVOKABLE void addHighlight(int page, double x, double y, double w, double h);
+    Q_INVOKABLE void addHighlightRects(int page, const QVariantList &rects, const QString &color = QStringLiteral("#FFD740"), int opacity = 42);
     Q_INVOKABLE void addRedaction(int page, double x, double y, double w, double h);
     Q_INVOKABLE void cropPage(int page, double x, double y, double w, double h);
     Q_INVOKABLE void addInk(int page, const QVariantList &points);
+    Q_INVOKABLE void addInkStyled(int page, const QVariantList &points, const QString &color, double widthRatio, int opacity = 100);
     Q_INVOKABLE void addWatermark(const QString &text, int fontSize = 42, int opacity = 45);
     Q_INVOKABLE void addPageNumbers();
     Q_INVOKABLE void addBatesNumbers(const QString &prefix, int start = 1, int padding = 6);
@@ -77,6 +79,8 @@ public:
     Q_INVOKABLE void redo() { m_undo.redo(); }
     Q_INVOKABLE bool validateCurrentDocument() const;
     Q_INVOKABLE QVariantList searchText(const QString &query, int maxResults = 200) const;
+    Q_INVOKABLE QVariantMap textSelection(int page, double x1, double y1, double x2, double y2) const;
+    Q_INVOKABLE void copyTextToClipboard(const QString &text) const;
     Q_INVOKABLE QVariantMap engineCapabilities() const;
     Q_INVOKABLE QVariantMap cacheStats() const { return m_pages.cacheStats(); }
     Q_INVOKABLE bool recoverAutosave();

@@ -33,6 +33,10 @@ QVariantMap EngineCapabilities::current() {
     capabilities[QStringLiteral("standardExport")] = true;
     capabilities[QStringLiteral("aes256Desktop")] = qpdf;
     capabilities[QStringLiteral("textSearch")] = true;
+    capabilities[QStringLiteral("textSelection")] = true;
+    capabilities[QStringLiteral("continuousPageViewer")] = true;
+    capabilities[QStringLiteral("liveInkPreview")] = true;
+    capabilities[QStringLiteral("stagedCropAndRedaction")] = true;
     capabilities[QStringLiteral("backendAbstraction")] = true;
     capabilities[QStringLiteral("memoryPolicy")] = true;
     capabilities[QStringLiteral("lowMemoryMode")] = true;

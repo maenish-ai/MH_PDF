@@ -8,6 +8,7 @@ h=(r/'core/PdfDocument.h').read_text(encoding='utf-8')
 pm=(r/'core/PageModel.cpp').read_text(encoding='utf-8')
 cap=(r/'core/EngineCapabilities.cpp').read_text(encoding='utf-8')
 tools=(r/'core/PdfToolsService.cpp').read_text(encoding='utf-8')
+qtcpp=(r/'core/QtPdfBackend.cpp').read_text(encoding='utf-8')
 dm=(r/'core/DocumentManager.cpp').read_text(encoding='utf-8')
 checks.update({
  'engine v7 name':'MaenPDF Engine 7' in h,
@@ -21,6 +22,9 @@ checks.update({
  'settings schema migration':'CurrentSettingsSchema' in (r/'core/AppSettings.h').read_text(encoding='utf-8') and 'migrateSettings' in (r/'core/AppSettings.cpp').read_text(encoding='utf-8'),
  'native print service':'QPrintDialog' in (r/'core/PrintService.cpp').read_text(encoding='utf-8') and 'QPrintPreviewDialog' in (r/'core/PrintService.cpp').read_text(encoding='utf-8'),
  'search API':'searchText' in h and 'pageText' in cpp,
+ 'real text selection':'textSelection' in h and 'getSelection(page' in qtcpp and 'textSelection' in cap,
+ 'continuous viewer capability':'continuousPageViewer' in cap,
+ 'live ink capability':'liveInkPreview' in cap,
  'Android content URI':'isContentUri' in cpp and 'prepareReadablePath' in cpp,
  'password open':'openDocumentWithPassword' in cpp and 'IncorrectPassword' in (r/'core/QtPdfBackend.cpp').read_text(encoding='utf-8'),
  'local PDF compare':'comparePdf' in tools and 'differencePercent' in tools,

@@ -6,6 +6,10 @@
 #include "QtPdfBackend.h"
 
 #include <QCoreApplication>
+#include <QClipboard>
+#include <QElapsedTimer>
+#include <QEventLoop>
+#include <QGuiApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
@@ -37,6 +41,48 @@ private:
     std::function<void()> m_redo;
     bool m_skipFirst{false};
 };
+
+
+namespace {
+QPointF displayToSourceNormalized(const QPointF &displayPoint, int rotation) {
+    const qreal u = qBound<qreal>(0.0, displayPoint.x(), 1.0);
+    const qreal v = qBound<qreal>(0.0, displayPoint.y(), 1.0);
+    switch (((rotation % 360) + 360) % 360) {
+    case 90:  return QPointF(v, 1.0 - u);
+    case 180: return QPointF(1.0 - u, 1.0 - v);
+    case 270: return QPointF(1.0 - v, u);
+    default:  return QPointF(u, v);
+    }
+}
+
+QPointF sourceToDisplayNormalized(const QPointF &sourcePoint, int rotation) {
+    const qreal u = qBound<qreal>(0.0, sourcePoint.x(), 1.0);
+    const qreal v = qBound<qreal>(0.0, sourcePoint.y(), 1.0);
+    switch (((rotation % 360) + 360) % 360) {
+    case 90:  return QPointF(1.0 - v, u);
+    case 180: return QPointF(1.0 - u, 1.0 - v);
+    case 270: return QPointF(v, 1.0 - u);
+    default:  return QPointF(u, v);
+    }
+}
+
+QVariantMap normalizedDisplayRect(const QVariantMap &sourceRect, int rotation) {
+    const qreal x = sourceRect.value(QStringLiteral("x")).toDouble();
+    const qreal y = sourceRect.value(QStringLiteral("y")).toDouble();
+    const qreal w = sourceRect.value(QStringLiteral("w")).toDouble();
+    const qreal h = sourceRect.value(QStringLiteral("h")).toDouble();
+    const QPointF a = sourceToDisplayNormalized(QPointF(x, y), rotation);
+    const QPointF b = sourceToDisplayNormalized(QPointF(x + w, y + h), rotation);
+    const qreal left = qMin(a.x(), b.x());
+    const qreal top = qMin(a.y(), b.y());
+    const qreal right = qMax(a.x(), b.x());
+    const qreal bottom = qMax(a.y(), b.y());
+    return {{QStringLiteral("x"), qBound<qreal>(0.0, left, 1.0)},
+            {QStringLiteral("y"), qBound<qreal>(0.0, top, 1.0)},
+            {QStringLiteral("w"), qBound<qreal>(0.0, right - left, 1.0 - left)},
+            {QStringLiteral("h"), qBound<qreal>(0.0, bottom - top, 1.0 - top)}};
+}
+}
 
 PdfDocument::PdfDocument(QObject *parent) : QObject(parent) {
     m_pages.setRenderer([this](const PageItem &page, const QSize &size) { return renderBase(page, size); });
@@ -370,6 +416,8 @@ bool PdfDocument::exportPdf(const QString &localPath, int onlyPage) {
         pixels.setHeight(qBound(800, pixels.height(), maxDim));
         const QImage image = m_pages.renderPage(i, pixels);
         painter.drawImage(QRect(0, 0, writer.width(), writer.height()), image);
+        // Keep the native window responsive during large multi-page saves.
+        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 8);
     }
     painter.end();
     return true;
@@ -525,6 +573,49 @@ QVariantList PdfDocument::searchText(const QString &query, int maxResults) const
     return results;
 }
 
+
+QVariantMap PdfDocument::textSelection(int pageIndex, double x1, double y1, double x2, double y2) const {
+    QVariantMap empty{{QStringLiteral("valid"), false},
+                      {QStringLiteral("text"), QString()},
+                      {QStringLiteral("rects"), QVariantList{}}};
+    const PageItem *page = m_pages.page(pageIndex);
+    if (!page || page->sourceId.isEmpty() || page->sourcePage < 0 || !page->base.isNull())
+        return empty;
+    const auto backend = m_backends.value(page->sourceId);
+    if (!backend)
+        return empty;
+
+    const QPointF displayStart(qBound(0.0, x1, 1.0), qBound(0.0, y1, 1.0));
+    const QPointF displayEnd(qBound(0.0, x2, 1.0), qBound(0.0, y2, 1.0));
+    const QPointF sourceStartNorm = displayToSourceNormalized(displayStart, page->rotation);
+    const QPointF sourceEndNorm = displayToSourceNormalized(displayEnd, page->rotation);
+    const QSizeF sourcePoints = backend->pagePointSize(page->sourcePage);
+    if (sourcePoints.width() <= 0 || sourcePoints.height() <= 0)
+        return empty;
+
+    QVariantMap result = backend->textSelection(
+        page->sourcePage,
+        QPointF(sourceStartNorm.x() * sourcePoints.width(), sourceStartNorm.y() * sourcePoints.height()),
+        QPointF(sourceEndNorm.x() * sourcePoints.width(), sourceEndNorm.y() * sourcePoints.height()));
+
+    QVariantList displayRects;
+    const QVariantList sourceRects = result.value(QStringLiteral("rects")).toList();
+    displayRects.reserve(sourceRects.size());
+    for (const QVariant &rectValue : sourceRects)
+        displayRects.push_back(normalizedDisplayRect(rectValue.toMap(), page->rotation));
+    result[QStringLiteral("rects")] = displayRects;
+    result[QStringLiteral("valid")] = result.value(QStringLiteral("valid")).toBool() && !displayRects.isEmpty();
+    return result;
+}
+
+void PdfDocument::copyTextToClipboard(const QString &text) const {
+    if (text.isEmpty())
+        return;
+    if (QClipboard *clipboard = QGuiApplication::clipboard())
+        clipboard->setText(text, QClipboard::Clipboard);
+    emit const_cast<PdfDocument *>(this)->info(QStringLiteral("info.text_copied"), {});
+}
+
 QVariantMap PdfDocument::engineCapabilities() const { return EngineCapabilities::current(); }
 
 QString PdfDocument::recoveryPath() const {
@@ -658,7 +749,13 @@ bool PdfDocument::protectCopy(const QString &outputPath, const QString &user, co
         emit errorOccurred(QStringLiteral("error.security_start"), {});
         return false;
     }
-    if (!process.waitForFinished(60000)) {
+    QElapsedTimer securityTimer;
+    securityTimer.start();
+    while (process.state() != QProcess::NotRunning && securityTimer.elapsed() < 60000) {
+        process.waitForFinished(35);
+        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 10);
+    }
+    if (process.state() != QProcess::NotRunning) {
         process.kill(); process.waitForFinished(3000);
         QFile::remove(inputPath); QFile::remove(encryptedPath);
         emit errorOccurred(QStringLiteral("error.security_timeout"), {});
@@ -830,6 +927,30 @@ void PdfDocument::addHighlight(int pageIndex, double x, double y, double width, 
     snapshotCommand(pageIndex, before, after, QStringLiteral("Highlight"));
 }
 
+
+void PdfDocument::addHighlightRects(int pageIndex, const QVariantList &rects, const QString &color, int opacity) {
+    if (m_locked || rects.isEmpty()) return;
+    auto *page = m_pages.page(pageIndex); if (!page) return;
+    ensureOverlay(page);
+    const QImage before = page->overlay;
+    QImage after = before;
+    QColor fill(color);
+    if (!fill.isValid()) fill = QColor(QStringLiteral("#FFD740"));
+    fill.setAlpha(qBound(5, opacity, 100) * 255 / 100);
+    QPainter painter(&after);
+    for (const QVariant &value : rects) {
+        const QVariantMap r = value.toMap();
+        const qreal x = qBound(0.0, r.value(QStringLiteral("x")).toDouble(), 1.0);
+        const qreal y = qBound(0.0, r.value(QStringLiteral("y")).toDouble(), 1.0);
+        const qreal w = qBound(0.0, r.value(QStringLiteral("w")).toDouble(), 1.0 - x);
+        const qreal h = qBound(0.0, r.value(QStringLiteral("h")).toDouble(), 1.0 - y);
+        if (w > 0.0005 && h > 0.0005)
+            painter.fillRect(QRectF(x * after.width(), y * after.height(), w * after.width(), h * after.height()), fill);
+    }
+    painter.end();
+    snapshotCommand(pageIndex, before, after, QStringLiteral("Highlight text"));
+}
+
 void PdfDocument::addRedaction(int pageIndex, double x, double y, double width, double height) {
     if (m_locked) return;
     auto *page = m_pages.page(pageIndex);
@@ -860,7 +981,7 @@ void PdfDocument::cropPage(int pageIndex, double x, double y, double width, doub
     if (nw < 0.05 || nh < 0.05) return;
 
     const PageItem before = *page;
-    QSize renderSize = (page->points * 2.0).toSize();
+    QSize renderSize = (page->points * 1.5).toSize();
     const int maxDim = MemoryPolicy::maxRenderDimension();
     renderSize.setWidth(qBound(600, renderSize.width(), maxDim));
     renderSize.setHeight(qBound(800, renderSize.height(), maxDim));
@@ -890,14 +1011,23 @@ void PdfDocument::cropPage(int pageIndex, double x, double y, double width, doub
 }
 
 void PdfDocument::addInk(int pageIndex, const QVariantList &points) {
+    addInkStyled(pageIndex, points, QStringLiteral("#185EB4"), 0.004, 100);
+}
+
+void PdfDocument::addInkStyled(int pageIndex, const QVariantList &points, const QString &color,
+                               double widthRatio, int opacity) {
     if (m_locked || points.size() < 4) return;
     auto *page = m_pages.page(pageIndex); if (!page) return;
     ensureOverlay(page);
     const QImage before = page->overlay;
     QImage after = before;
+    QColor penColor(color);
+    if (!penColor.isValid()) penColor = QColor(QStringLiteral("#185EB4"));
+    penColor.setAlpha(qBound(5, opacity, 100) * 255 / 100);
+    const qreal penWidth = qMax<qreal>(1.0, qBound(0.0005, widthRatio, 0.05) * after.width());
     QPainter painter(&after);
     painter.setRenderHint(QPainter::Antialiasing);
-    painter.setPen(QPen(QColor(24, 94, 180), qMax(3, after.width() / 300), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter.setPen(QPen(penColor, penWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     QPainterPath path;
     path.moveTo(points[0].toDouble() * after.width(), points[1].toDouble() * after.height());
     for (int i = 2; i + 1 < points.size(); i += 2)

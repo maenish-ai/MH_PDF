@@ -9,6 +9,7 @@ tests=[
     'engine_v7_audit.py',
     'security_audit.py',
     'performance_audit.py',
+    'interaction_audit.py',
     'open_source_audit.py',
 ]
 for test in tests:

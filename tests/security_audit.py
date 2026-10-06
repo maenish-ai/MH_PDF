@@ -9,7 +9,7 @@ checks={
  'no embedded private key':'BEGIN PRIVATE KEY' not in source and 'BEGIN RSA PRIVATE KEY' not in source,
  'no shell command execution':'cmd.exe' not in tools and 'powershell' not in tools and 'system(' not in tools,
  'external providers use QProcess arguments':'process.start(program, arguments)' in tools,
- 'provider timeouts':'waitForFinished(timeoutMs)' in tools and 'process.kill()' in tools,
+ 'provider timeouts':'timer.elapsed() < timeoutMs' in tools and 'process.kill()' in tools,
  'OCR language validation':'languagePattern' in tools,
  'signing secrets ignored':'*.jks' in gitignore and '*.keystore' in gitignore,
  'security policy exists':(r/'SECURITY.md').exists(),

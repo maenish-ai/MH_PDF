@@ -1,55 +1,49 @@
-# MaenPDF 7.1
+# MaenPDF 7.2
 
-MaenPDF is a free, local-first, bilingual PDF workspace written in C++17 with Qt/QML. The project is designed around four goals: **fast, private, free and open**. Core document work happens on the user's device; MaenPDF does not require a cloud account or subscription.
+MaenPDF is a free, local-first, bilingual PDF workspace written in C++17 with Qt/QML. Its product goals are **fast, private, free and open**. Documents are processed on the user's device; the core application does not require a cloud account or subscription.
 
-## 7.1 Professional Foundation
+## 7.2 Interaction & Performance Release
 - Complete English/Arabic application catalogs with persistent language choice and automatic LTR/RTL layout.
-- Professional desktop menu surface: File, Edit, View, Document, Pages, Comment, Forms, Protect, Convert, Tools, Window, Language and Help.
-- Searchable `Ctrl+K` command palette.
-- Native desktop Print, Print Current Page and Print Preview through Qt Print Support and the operating-system printer dialog.
-- Clean Windows upgrades: the application directory is replaced on every update so obsolete Qt plugins/runtime DLLs cannot remain mixed with the new build.
-- One-time migration from pre-7.1 user state plus an explicit settings schema for future compatible upgrades.
-- Tabs, Recent Files, drag/drop, document properties, preferences, dark mode and low-memory mode.
-- Lazy, source-backed PDF pages and bounded LRU render cache so large PDFs are not rasterized into RAM up front.
-- Search in source PDF text, thumbnails, zoom, page navigation and recovery snapshots.
+- Continuous multi-page viewer: the mouse wheel/touchpad moves naturally from page to page instead of trapping the user on one page.
+- Virtualized/reused page delegates, bounded LRU render cache and low-memory mode for old and new devices.
+- Pointer drag selects real source-PDF text and exposes Copy Text / Highlight Selection.
+- Text tool inserts text at the clicked page position.
+- Highlight tool follows real text geometry, with an area fallback for scanned/image-only pages.
+- Draw tool previews ink live while dragging and commits one undoable stroke with selectable brush color/width.
+- Crop is previewed first, has adjustable corner handles, and only changes the page after Apply.
+- Redaction is previewed first and only commits after Apply; MaenPDF saves edited output as flattened PDF pages.
+- Search, thumbnails, zoom, Page Up/Page Down navigation, tabs, Recent Files, drag/drop and recovery snapshots.
 - Create/open/save, combine, extract, insert/delete/duplicate/move/copy/paste/rotate/crop pages.
-- Overlay text, image, highlight, ink, signature image, watermark, page numbers and Bates numbering.
-- Safe flattened redaction, safe flattened export and visual PDF comparison.
+- Image/signature overlays, watermark, page numbers and Bates numbering.
+- Native Windows Print, Print Current Page and Print Preview.
 - Optional local qpdf tools for AES-256 protection, decrypt, optimize, linearize, repair and split.
-- Optional local Tesseract OCR (`eng+ara` by default) and optional LibreOffice conversion bridge.
-- Android `content://` import/export and signed CI test APK workflow.
+- Optional local Tesseract OCR and optional LibreOffice conversion bridge.
+- Clean Windows upgrades and a stable Android package identity for update continuity.
 
-## Printing
-Windows builds include system printing. The File menu contains Print, Print Current Page and Print Preview. The native print dialog supplies installed printers, copies, ranges and printer-specific capabilities. Printing uses the same local page renderer as the viewer and does not upload the document.
-
-Android keeps the Print commands visible but disabled until a native Android Print Framework provider is integrated; this avoids pretending an unsupported path is complete.
+## Performance model
+Only visible/nearby page delegates are instantiated. Render images are requested at the displayed size and loaded asynchronously, while Qt PDF document access is serialized. Long local operations keep the native event loop alive so Windows remains responsive. The render cache has a fixed memory budget and can be reduced further with Low Memory Mode.
 
 ## Clean upgrade contract
-The installer uses the same stable AppId for updates. Before copying a new build it cleans the MaenPDF application directory, preventing files from an older runtime from surviving the update. The first 7.1+ installation also resets incompatible pre-7.1 application preferences/cache. Future 7.1+ updates preserve compatible preferences unless the user selects **Reset MaenPDF preferences and cache** during setup. User PDF documents are never stored in the application directory and are never deleted by this process.
+The installer uses the same stable AppId for updates and replaces the application directory before copying a new build, preventing obsolete runtime/plugins from surviving beside the new version. The one-time pre-7.1 settings migration remains in place; later compatible settings are preserved unless the user selects the installer reset task. User PDF documents are never deleted by the installer.
 
 ## Build contract
 - CMake 3.21+
 - C++17
 - Qt 6.11.x with Qt PDF
-- Desktop: Qt Widgets + Qt Print Support for native printing
+- Desktop: Qt Widgets + Qt Print Support
 - CI Qt: 6.11.2
 - Android: target API 36, minimum API 28, JDK 21, NDK 27.2.12479018
 
 ```bash
 cmake -S . -B build -DCMAKE_PREFIX_PATH=/path/to/Qt/6.11.2/<kit>
 cmake --build build --config Release
-```
-
-Run all local release gates before pushing:
-
-```bash
 python scripts/preflight.py
 ```
 
 ## Honest capability boundary
-MaenPDF 7.1 is not yet a full object-tree PDF editor. Existing PDF text/image objects are not rewritten structurally, certificate-backed digital signatures and AcroForm authoring remain disabled, and those menu entries are deliberately unavailable rather than presented as completed features. The architecture keeps these capabilities behind explicit engine/provider boundaries for future development.
+MaenPDF 7.2 is not yet a full object-tree PDF editor. Existing source PDF text/image objects are not structurally rewritten, certificate-backed digital signatures and AcroForm authoring remain disabled, and true object-tree redaction is not claimed. Text selection is available for source-backed text PDFs; pages rasterized by crop or image-only scans require OCR for selectable text.
 
 ## Privacy and community
-Documents are processed locally. Optional qpdf, Tesseract and LibreOffice providers are discovered at runtime and are not bundled into the lightweight core. Donation support is optional and does not unlock core functionality.
+Optional qpdf, Tesseract and LibreOffice providers are discovered at runtime and are not required by the lightweight core. Donation support is optional and does not unlock functionality.
 
 Code is licensed under GPL-3.0-or-later. Use of the MaenPDF name and logo is governed separately by `BRAND_POLICY.md`.

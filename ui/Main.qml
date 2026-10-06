@@ -18,9 +18,18 @@ ApplicationWindow {
     property var pdfDocument: documentManager.currentDocument
     property real zoom: 0.74
     property string tool: "select"
-    property var inkPoints: []
-    property real dragStartX: 0
-    property real dragStartY: 0
+    property string selectedText: ""
+    property var selectedTextRects: []
+    property int selectedTextPage: -1
+    property int pendingActionPage: -1
+    property string pendingActionTool: ""
+    property var pendingActionRect: ({"x": 0, "y": 0, "w": 0, "h": 0})
+    property color drawColor: "#2563eb"
+    property real drawWidth: 3.0
+    property int drawOpacity: 100
+    property color highlightColor: "#ffd54f"
+    property int highlightOpacity: 42
+    property bool syncingPageFromScroll: false
     property bool homeVisible: true
     property bool allowWindowClose: false
     property int pendingCloseTab: -1
@@ -40,6 +49,12 @@ ApplicationWindow {
     readonly property color mutedColor: appSettings.darkMode ? "#aeb8c8" : "#667085"
     readonly property color borderColor: appSettings.darkMode ? "#334155" : "#dce1e8"
     readonly property color accentColor: "#2864dc"
+    readonly property color pointerColor: "#2864dc"
+    readonly property color textToolColor: "#7c3aed"
+    readonly property color highlightToolColor: "#d97706"
+    readonly property color drawToolColor: "#0891b2"
+    readonly property color redactToolColor: "#dc2626"
+    readonly property color cropToolColor: "#059669"
 
     palette.window: panelColor
     palette.windowText: textColor
@@ -80,18 +95,63 @@ ApplicationWindow {
     }
 
     function fitWidth() {
-        if (!pdfDocument)
+        if (!pdfDocument || !documentView)
             return
         var w = pdfDocument.pages.pageWidth(pdfDocument.currentPage)
-        zoom = Math.max(0.12, Math.min(3.0, (view.width - 120) / Math.max(1, w)))
+        zoom = Math.max(0.12, Math.min(3.0, (documentView.width - 90) / Math.max(1, w)))
     }
 
     function fitPage() {
-        if (!pdfDocument)
+        if (!pdfDocument || !documentView)
             return
         var w = pdfDocument.pages.pageWidth(pdfDocument.currentPage)
         var h = pdfDocument.pages.pageHeight(pdfDocument.currentPage)
-        zoom = Math.max(0.12, Math.min(3.0, Math.min((view.width - 120) / Math.max(1, w), (view.height - 120) / Math.max(1, h))))
+        zoom = Math.max(0.12, Math.min(3.0, Math.min((documentView.width - 90) / Math.max(1, w), (documentView.height - 70) / Math.max(1, h))))
+    }
+
+    function clearTextSelection() {
+        selectedText = ""
+        selectedTextRects = []
+        selectedTextPage = -1
+    }
+
+    function cancelPendingAction() {
+        pendingActionPage = -1
+        pendingActionTool = ""
+        pendingActionRect = ({"x": 0, "y": 0, "w": 0, "h": 0})
+    }
+
+    function chooseTool(name) {
+        if (tool !== name) {
+            cancelPendingAction()
+            if (name !== "select")
+                clearTextSelection()
+        }
+        tool = name
+        homeVisible = false
+    }
+
+    function applyPendingAction() {
+        if (pendingActionPage < 0)
+            return
+        var r = pendingActionRect
+        if (pendingActionTool === "crop")
+            pdfDocument.cropPage(pendingActionPage, r.x, r.y, r.w, r.h)
+        else if (pendingActionTool === "redact")
+            pdfDocument.addRedaction(pendingActionPage, r.x, r.y, r.w, r.h)
+        cancelPendingAction()
+        chooseTool("select")
+    }
+
+    function toolHint() {
+        if (pendingActionPage >= 0)
+            return pendingActionTool === "crop" ? tx("tool.crop_ready") : tx("tool.redact_ready")
+        if (tool === "text") return tx("tool.text_hint")
+        if (tool === "highlight") return tx("tool.highlight_hint")
+        if (tool === "draw") return tx("tool.draw_hint")
+        if (tool === "redact") return tx("tool.redact_hint")
+        if (tool === "crop") return tx("tool.crop_hint")
+        return selectedText !== "" ? tx("tool.selection_ready") : tx("tool.pointer_hint")
     }
 
     function requestCloseTab(index) {
@@ -128,6 +188,8 @@ ApplicationWindow {
         target: documentManager
         function onCurrentDocumentChanged() {
             tool = "select"
+            clearTextSelection()
+            cancelPendingAction()
             zoom = 0.74
             if (pdfDocument && pdfDocument.recoveryAvailable)
                 recoveryDlg.open()
@@ -142,6 +204,14 @@ ApplicationWindow {
             passwordPath = path
             passwordInput.clear()
             passwordDlg.open()
+        }
+    }
+
+    Connections {
+        target: pdfDocument
+        function onCurrentPageChanged() {
+            if (!syncingPageFromScroll && documentView && !homeVisible)
+                documentView.positionViewAtIndex(pdfDocument.currentPage, ListView.Contain)
         }
     }
 
@@ -831,7 +901,11 @@ ApplicationWindow {
     Shortcut { sequences: [StandardKey.Print]; enabled: printService.available; onActivated: printService.printDocument(pdfDocument, false) }
     Shortcut { sequences: [StandardKey.Undo]; onActivated: if (pdfDocument.canUndo) pdfDocument.undo() }
     Shortcut { sequences: [StandardKey.Redo]; onActivated: if (pdfDocument.canRedo) pdfDocument.redo() }
+    Shortcut { sequences: [StandardKey.Copy]; onActivated: selectedText !== "" ? pdfDocument.copyTextToClipboard(selectedText) : pdfDocument.copyPage(pdfDocument.currentPage) }
     Shortcut { sequences: [StandardKey.Delete]; onActivated: pdfDocument.deletePage(pdfDocument.currentPage) }
+    Shortcut { sequence: "PageDown"; onActivated: if (pdfDocument.currentPage < pdfDocument.pageCount - 1) pdfDocument.currentPage += 1 }
+    Shortcut { sequence: "PageUp"; onActivated: if (pdfDocument.currentPage > 0) pdfDocument.currentPage -= 1 }
+    Shortcut { sequence: "Escape"; onActivated: { cancelPendingAction(); clearTextSelection(); chooseTool("select") } }
     Shortcut { sequence: "Ctrl+K"; onActivated: commandDlg.open() }
 
     Popup {
@@ -927,7 +1001,7 @@ ApplicationWindow {
             Action { text: tx("action.move_page_up"); enabled: !pdfDocument.locked && pdfDocument.currentPage > 0; onTriggered: pdfDocument.movePage(pdfDocument.currentPage, pdfDocument.currentPage - 1) }
             Action { text: tx("action.move_page_down"); enabled: !pdfDocument.locked && pdfDocument.currentPage < pdfDocument.pageCount - 1; onTriggered: pdfDocument.movePage(pdfDocument.currentPage, pdfDocument.currentPage + 1) }
             Action { text: tx("action.rotate_clockwise"); enabled: !pdfDocument.locked; onTriggered: pdfDocument.rotatePage(pdfDocument.currentPage, 90) }
-            Action { text: tx("action.crop"); enabled: !pdfDocument.locked; onTriggered: { tool = "crop"; homeVisible = false } }
+            Action { text: tx("action.crop"); enabled: !pdfDocument.locked; onTriggered: chooseTool("crop") }
             Action { text: tx("action.extract"); onTriggered: extractDlg.open() }
             Action { text: tx("action.split"); enabled: providersState.qpdf && pdfDocument.filePath !== ""; onTriggered: splitDlg.open() }
             MenuSeparator {}
@@ -938,10 +1012,10 @@ ApplicationWindow {
 
         Menu {
             title: tx("menu.comment")
-            Action { text: tx("action.pointer"); onTriggered: tool = "select" }
-            Action { text: tx("action.edit_text"); enabled: !pdfDocument.locked; onTriggered: { tool = "text"; homeVisible = false } }
-            Action { text: tx("action.highlight"); enabled: !pdfDocument.locked; onTriggered: { tool = "highlight"; homeVisible = false } }
-            Action { text: tx("action.draw"); enabled: !pdfDocument.locked; onTriggered: { tool = "draw"; homeVisible = false } }
+            Action { text: tx("action.pointer"); onTriggered: chooseTool("select") }
+            Action { text: tx("action.edit_text"); enabled: !pdfDocument.locked; onTriggered: chooseTool("text") }
+            Action { text: tx("action.highlight"); enabled: !pdfDocument.locked; onTriggered: chooseTool("highlight") }
+            Action { text: tx("action.draw"); enabled: !pdfDocument.locked; onTriggered: chooseTool("draw") }
             Action { text: tx("action.insert_image"); enabled: !pdfDocument.locked; onTriggered: imageDlg.open() }
             Action { text: tx("action.signature"); enabled: !pdfDocument.locked; onTriggered: signatureDlg.open() }
             MenuSeparator {}
@@ -964,7 +1038,7 @@ ApplicationWindow {
             title: tx("menu.protect")
             Action { text: tx("action.password_permissions"); enabled: providersState.qpdf; onTriggered: securityDlg.open() }
             Action { text: tx("action.decrypt"); enabled: providersState.qpdf && pdfDocument.filePath !== ""; onTriggered: decryptDlg.open() }
-            Action { text: tx("action.redact"); enabled: !pdfDocument.locked; onTriggered: { tool = "redact"; homeVisible = false } }
+            Action { text: tx("action.redact"); enabled: !pdfDocument.locked; onTriggered: chooseTool("redact") }
             Action { text: tx("action.safe_flatten"); enabled: pdfDocument.filePath !== ""; onTriggered: { toolOutputDlg.operation = "safeFlatten"; toolOutputDlg.open() } }
             Action { text: tx("action.lock_session"); onTriggered: pdfDocument.setLocked(!pdfDocument.locked) }
             MenuSeparator {}
@@ -1014,7 +1088,7 @@ ApplicationWindow {
     }
 
     header: Rectangle {
-        height: 146
+        height: 154
         color: panelColor
         border.color: borderColor
         ColumnLayout {
@@ -1090,27 +1164,80 @@ ApplicationWindow {
 
             Rectangle {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 46
+                Layout.preferredHeight: 54
                 color: subPanelColor
                 RowLayout {
                     anchors.fill: parent
-                    anchors.leftMargin: 18
-                    anchors.rightMargin: 18
+                    anchors.leftMargin: 14
+                    anchors.rightMargin: 14
                     spacing: 5
                     ToolButton { text: "↶"; enabled: pdfDocument.canUndo; onClicked: pdfDocument.undo() }
                     ToolButton { text: "↷"; enabled: pdfDocument.canRedo; onClicked: pdfDocument.redo() }
-                    Rectangle { width: 1; height: 28; color: borderColor }
-                    Button { text: tx("action.pointer"); checkable: true; checked: tool === "select"; onClicked: tool = "select" }
-                    Button { text: tx("action.edit_text"); checkable: true; checked: tool === "text"; enabled: !pdfDocument.locked; onClicked: tool = "text" }
-                    Button { text: tx("action.highlight"); checkable: true; checked: tool === "highlight"; enabled: !pdfDocument.locked; onClicked: tool = "highlight" }
-                    Button { text: tx("action.draw"); checkable: true; checked: tool === "draw"; enabled: !pdfDocument.locked; onClicked: tool = "draw" }
-                    Button { text: tx("action.redact"); checkable: true; checked: tool === "redact"; enabled: !pdfDocument.locked; onClicked: tool = "redact" }
-                    Button { text: tx("action.crop"); checkable: true; checked: tool === "crop"; enabled: !pdfDocument.locked; onClicked: tool = "crop" }
-                    ToolButton { text: tx("action.signature"); enabled: !pdfDocument.locked; onClicked: signatureDlg.open() }
+                    Rectangle { width: 1; height: 30; color: borderColor }
+
+                    Button {
+                        id: pointerToolButton
+                        text: tx("action.pointer"); checkable: true; checked: tool === "select"; onClicked: chooseTool("select")
+                        palette.buttonText: checked ? "white" : textColor
+                        background: Rectangle { radius: 8; color: pointerToolButton.checked ? pointerColor : (pointerToolButton.hovered ? (appSettings.darkMode ? "#24364f" : "#e8f0ff") : "transparent"); border.color: pointerToolButton.checked ? pointerColor : borderColor }
+                    }
+                    Button {
+                        id: textToolButton
+                        text: tx("action.edit_text"); checkable: true; checked: tool === "text"; enabled: !pdfDocument.locked; onClicked: chooseTool("text")
+                        palette.buttonText: checked ? "white" : textColor
+                        background: Rectangle { radius: 8; color: textToolButton.checked ? textToolColor : (textToolButton.hovered ? (appSettings.darkMode ? "#33235c" : "#f1eafe") : "transparent"); border.color: textToolButton.checked ? textToolColor : borderColor }
+                    }
+                    Button {
+                        id: highlightToolButton
+                        text: tx("action.highlight"); checkable: true; checked: tool === "highlight"; enabled: !pdfDocument.locked; onClicked: chooseTool("highlight")
+                        palette.buttonText: checked ? "white" : textColor
+                        background: Rectangle { radius: 8; color: highlightToolButton.checked ? highlightToolColor : (highlightToolButton.hovered ? (appSettings.darkMode ? "#4b3719" : "#fff4d6") : "transparent"); border.color: highlightToolButton.checked ? highlightToolColor : borderColor }
+                    }
+                    Button {
+                        id: drawToolButton
+                        text: tx("action.draw"); checkable: true; checked: tool === "draw"; enabled: !pdfDocument.locked; onClicked: chooseTool("draw")
+                        palette.buttonText: checked ? "white" : textColor
+                        background: Rectangle { radius: 8; color: drawToolButton.checked ? drawToolColor : (drawToolButton.hovered ? (appSettings.darkMode ? "#153d47" : "#e4f8fb") : "transparent"); border.color: drawToolButton.checked ? drawToolColor : borderColor }
+                    }
+                    Button {
+                        id: redactToolButton
+                        text: tx("action.redact"); checkable: true; checked: tool === "redact"; enabled: !pdfDocument.locked; onClicked: chooseTool("redact")
+                        palette.buttonText: checked ? "white" : textColor
+                        background: Rectangle { radius: 8; color: redactToolButton.checked ? redactToolColor : (redactToolButton.hovered ? (appSettings.darkMode ? "#4a2025" : "#feecec") : "transparent"); border.color: redactToolButton.checked ? redactToolColor : borderColor }
+                    }
+                    Button {
+                        id: cropToolButton
+                        text: tx("action.crop"); checkable: true; checked: tool === "crop"; enabled: !pdfDocument.locked; onClicked: chooseTool("crop")
+                        palette.buttonText: checked ? "white" : textColor
+                        background: Rectangle { radius: 8; color: cropToolButton.checked ? cropToolColor : (cropToolButton.hovered ? (appSettings.darkMode ? "#173f34" : "#e7f8f1") : "transparent"); border.color: cropToolButton.checked ? cropToolColor : borderColor }
+                    }
+
+                    Rectangle { width: 1; height: 30; color: borderColor }
+                    Label {
+                        text: toolHint()
+                        color: tool === "redact" ? redactToolColor : tool === "crop" ? cropToolColor : tool === "draw" ? drawToolColor : tool === "highlight" ? highlightToolColor : tool === "text" ? textToolColor : pointerColor
+                        font.pixelSize: 11
+                        Layout.maximumWidth: 215
+                        elide: Text.ElideRight
+                    }
+                    Button { visible: selectedText !== ""; text: tx("action.copy_text"); onClicked: pdfDocument.copyTextToClipboard(selectedText) }
+                    Button { visible: selectedText !== "" && selectedTextPage >= 0; text: tx("action.highlight_selection"); onClicked: { pdfDocument.addHighlightRects(selectedTextPage, selectedTextRects, highlightColor.toString(), highlightOpacity); clearTextSelection() } }
+                    Button { visible: pendingActionPage >= 0; text: tx("action.apply"); highlighted: true; onClicked: applyPendingAction() }
+                    Button { visible: pendingActionPage >= 0; text: tx("dialog.cancel"); onClicked: cancelPendingAction() }
+
+                    RowLayout {
+                        visible: tool === "draw"
+                        spacing: 4
+                        Label { text: tx("tool.brush"); color: mutedColor; font.pixelSize: 10 }
+                        Rectangle { width: 18; height: 18; radius: 9; color: "#2563eb"; border.color: drawColor.toString() === "#2563eb" ? "white" : borderColor; TapHandler { onTapped: drawColor = "#2563eb" } }
+                        Rectangle { width: 18; height: 18; radius: 9; color: "#111827"; border.color: drawColor.toString() === "#111827" ? "white" : borderColor; TapHandler { onTapped: drawColor = "#111827" } }
+                        Rectangle { width: 18; height: 18; radius: 9; color: "#dc2626"; border.color: drawColor.toString() === "#dc2626" ? "white" : borderColor; TapHandler { onTapped: drawColor = "#dc2626" } }
+                        Slider { from: 1; to: 10; value: drawWidth; Layout.preferredWidth: 82; onMoved: drawWidth = value }
+                    }
                     Item { Layout.fillWidth: true }
                     ToolButton { text: tx("action.fit_width"); onClicked: fitWidth() }
                     ToolButton { text: "−"; onClicked: zoom = Math.max(0.12, zoom - 0.1) }
-                    Label { text: i18n.number(Math.round(zoom * 100)) + "%"; Layout.preferredWidth: 58; horizontalAlignment: Text.AlignHCenter; color: textColor }
+                    Label { text: i18n.number(Math.round(zoom * 100)) + "%"; Layout.preferredWidth: 54; horizontalAlignment: Text.AlignHCenter; color: textColor }
                     ToolButton { text: "+"; onClicked: zoom = Math.min(3, zoom + 0.1) }
                 }
             }
@@ -1244,7 +1371,7 @@ ApplicationWindow {
                                 radius: 8
                                 border.color: index === pdfDocument.currentPage ? "#91aff0" : "transparent"
                             }
-                            Image { source: pageImage; anchors.horizontalCenter: parent.horizontalCenter; y: 12; width: 104; height: 147; fillMode: Image.PreserveAspectFit; cache: false; asynchronous: false }
+                            Image { source: pageImage; anchors.horizontalCenter: parent.horizontalCenter; y: 12; width: 104; height: 147; sourceSize.width: 104; sourceSize.height: 147; fillMode: Image.PreserveAspectFit; cache: false; asynchronous: true }
                             Label { text: i18n.number(index + 1); color: textColor; anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; anchors.bottomMargin: 6 }
                             TapHandler { onTapped: pdfDocument.currentPage = index }
                         }
@@ -1262,88 +1389,320 @@ ApplicationWindow {
             Rectangle {
                 SplitView.fillWidth: true
                 color: canvasColor
-                Flickable {
-                    id: view
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: appSettings.darkMode ? "#0b1020" : "#e8edf5" }
+                    GradientStop { position: 1.0; color: appSettings.darkMode ? "#111827" : "#d7deea" }
+                }
+
+                ListView {
+                    id: documentView
                     anchors.fill: parent
-                    contentWidth: page.width + 100
-                    contentHeight: page.height + 100
+                    orientation: ListView.Vertical
+                    flickableDirection: Flickable.AutoFlickIfNeeded
+                    spacing: 18
                     clip: true
-                    ScrollBar.vertical: ScrollBar {}
-                    ScrollBar.horizontal: ScrollBar {}
-                    Rectangle {
-                        id: page
-                        x: Math.max(50, (view.width - width) / 2)
-                        y: 50
-                        width: pdfDocument.pages.pageWidth(pdfDocument.currentPage) * zoom
-                        height: pdfDocument.pages.pageHeight(pdfDocument.currentPage) * zoom
-                        color: "white"
-                        layer.enabled: true
-                        Image {
-                            id: pageImg
-                            anchors.fill: parent
-                            fillMode: Image.Stretch
-                            cache: false
-                            asynchronous: false
-                            source: {
-                                var modelRev = pdfDocument.pages.modelRevision
-                                return pdfDocument.pages.imageSource(pdfDocument.currentPage)
+                    reuseItems: true
+                    cacheBuffer: appSettings.lowMemoryMode ? Math.round(height * 0.7) : Math.round(height * 1.8)
+                    model: pdfDocument.pages
+                    currentIndex: pdfDocument.currentPage
+                    highlightFollowsCurrentItem: false
+                    boundsBehavior: Flickable.StopAtBounds
+                    flickDeceleration: 2200
+                    maximumFlickVelocity: 4200
+                    contentWidth: Math.max(width, pdfDocument.pages.maxPageWidth() * zoom + 100)
+                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                    ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
+
+                    onContentYChanged: {
+                        if (!moving && !flicking && count <= 0)
+                            return
+                        var probeX = contentX + Math.max(1, width / 2)
+                        var probeY = contentY + Math.max(1, height / 2)
+                        var idx = indexAt(probeX, probeY)
+                        if (idx < 0)
+                            idx = indexAt(contentX + 20, contentY + 20)
+                        if (idx >= 0 && idx !== pdfDocument.currentPage) {
+                            syncingPageFromScroll = true
+                            pdfDocument.currentPage = idx
+                            Qt.callLater(function() { syncingPageFromScroll = false })
+                        }
+                    }
+
+                    delegate: Item {
+                        id: pageDelegate
+                        required property int index
+                        required property string pageImage
+                        required property real pageWidth
+                        required property real pageHeight
+                        width: documentView.contentWidth
+                        height: Math.max(80, pageHeight * zoom + 28)
+                        property real pressX: 0
+                        property real pressY: 0
+                        property var localInkPoints: []
+                        property bool drawingInk: false
+
+                        function normalizedRect(x1, y1, x2, y2) {
+                            var left = Math.max(0, Math.min(x1, x2) / Math.max(1, pageSurface.width))
+                            var top = Math.max(0, Math.min(y1, y2) / Math.max(1, pageSurface.height))
+                            var right = Math.min(1, Math.max(x1, x2) / Math.max(1, pageSurface.width))
+                            var bottom = Math.min(1, Math.max(y1, y2) / Math.max(1, pageSurface.height))
+                            return ({"x": left, "y": top, "w": Math.max(0, right - left), "h": Math.max(0, bottom - top)})
+                        }
+
+                        function finishTextDrag(mouse, makeHighlight) {
+                            var distance = Math.abs(mouse.x - pressX) + Math.abs(mouse.y - pressY)
+                            if (distance < 6) {
+                                if (!makeHighlight)
+                                    clearTextSelection()
+                                return
+                            }
+                            var result = pdfDocument.textSelection(index,
+                                                                   pressX / Math.max(1, pageSurface.width),
+                                                                   pressY / Math.max(1, pageSurface.height),
+                                                                   mouse.x / Math.max(1, pageSurface.width),
+                                                                   mouse.y / Math.max(1, pageSurface.height))
+                            if (!result.valid || !result.text || result.rects.length === 0) {
+                                if (makeHighlight) {
+                                    var fallbackRect = pageDelegate.normalizedRect(pressX, pressY, mouse.x, mouse.y)
+                                    if (fallbackRect.w >= 0.005 && fallbackRect.h >= 0.005)
+                                        pdfDocument.addHighlightRects(index, [fallbackRect], highlightColor.toString(), highlightOpacity)
+                                } else {
+                                    clearTextSelection()
+                                }
+                                return
+                            }
+                            if (makeHighlight) {
+                                pdfDocument.addHighlightRects(index, result.rects, highlightColor.toString(), highlightOpacity)
+                                clearTextSelection()
+                            } else {
+                                selectedText = result.text
+                                selectedTextRects = result.rects
+                                selectedTextPage = index
                             }
                         }
+
                         Rectangle {
-                            id: selectionRect
-                            visible: interactionArea.pressed && (tool === "redact" || tool === "crop")
-                            x: Math.min(dragStartX, interactionArea.mouseX)
-                            y: Math.min(dragStartY, interactionArea.mouseY)
-                            width: Math.abs(interactionArea.mouseX - dragStartX)
-                            height: Math.abs(interactionArea.mouseY - dragStartY)
-                            color: tool === "redact" ? "#80000000" : "#334f7cff"
-                            border.width: 2
-                            border.color: tool === "redact" ? "#ef4444" : "#2563eb"
+                            id: pageShadow
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            y: 8
+                            width: pageSurface.width + 10
+                            height: pageSurface.height + 10
+                            radius: 6
+                            color: appSettings.darkMode ? "#50000000" : "#24000000"
                         }
-                        MouseArea {
-                            id: interactionArea
-                            anchors.fill: parent
-                            enabled: tool !== "select" && !pdfDocument.locked
-                            hoverEnabled: true
-                            onPressed: function(mouse) {
-                                dragStartX = mouse.x
-                                dragStartY = mouse.y
-                                if (tool === "text") {
-                                    textDlg.nx = mouse.x / width
-                                    textDlg.ny = mouse.y / height
-                                    textDlg.open()
-                                } else if (tool === "highlight") {
-                                    pdfDocument.addHighlight(pdfDocument.currentPage, mouse.x / width, mouse.y / height, 0.25, 0.035)
-                                } else if (tool === "draw") {
-                                    inkPoints = [mouse.x / width, mouse.y / height]
+
+                        Rectangle {
+                            id: pageSurface
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            y: 4
+                            width: Math.max(40, pageWidth * zoom)
+                            height: Math.max(50, pageHeight * zoom)
+                            color: "white"
+                            border.width: index === pdfDocument.currentPage ? 2 : 1
+                            border.color: index === pdfDocument.currentPage ? accentColor : (appSettings.darkMode ? "#334155" : "#cbd3df")
+                            radius: 2
+                            clip: true
+
+                            Image {
+                                id: pageImg
+                                anchors.fill: parent
+                                fillMode: Image.Stretch
+                                cache: false
+                                asynchronous: true
+                                sourceSize.width: Math.max(64, Math.round(pageSurface.width))
+                                sourceSize.height: Math.max(64, Math.round(pageSurface.height))
+                                source: {
+                                    var modelRev = pdfDocument.pages.modelRevision
+                                    return pageImage
                                 }
                             }
-                            onPositionChanged: function(mouse) {
-                                if (pressed && tool === "draw")
-                                    inkPoints.push(mouse.x / width, mouse.y / height)
+
+                            BusyIndicator {
+                                anchors.centerIn: parent
+                                running: pageImg.status === Image.Loading
+                                visible: running
                             }
-                            onReleased: function(mouse) {
-                                if (tool === "draw") {
-                                    pdfDocument.addInk(pdfDocument.currentPage, inkPoints)
-                                    inkPoints = []
-                                } else if (tool === "redact" || tool === "crop") {
-                                    var x1 = dragStartX / width
-                                    var y1 = dragStartY / height
-                                    var x2 = mouse.x / width
-                                    var y2 = mouse.y / height
-                                    var nx = Math.min(x1, x2)
-                                    var ny = Math.min(y1, y2)
-                                    var nw = Math.abs(x2 - x1)
-                                    var nh = Math.abs(y2 - y1)
-                                    if (tool === "redact")
-                                        pdfDocument.addRedaction(pdfDocument.currentPage, nx, ny, nw, nh)
-                                    else
-                                        pdfDocument.cropPage(pdfDocument.currentPage, nx, ny, nw, nh)
-                                    tool = "select"
+
+                            Repeater {
+                                model: selectedTextPage === index ? selectedTextRects : []
+                                delegate: Rectangle {
+                                    required property var modelData
+                                    x: modelData.x * pageSurface.width
+                                    y: modelData.y * pageSurface.height
+                                    width: modelData.w * pageSurface.width
+                                    height: modelData.h * pageSurface.height
+                                    color: "#553b82f6"
+                                    border.color: "#7aa8ff"
+                                    border.width: 1
                                 }
+                            }
+
+                            Canvas {
+                                id: liveInk
+                                anchors.fill: parent
+                                visible: pageDelegate.drawingInk && tool === "draw"
+                                onPaint: {
+                                    var ctx = getContext("2d")
+                                    ctx.clearRect(0, 0, width, height)
+                                    if (pageDelegate.localInkPoints.length < 4)
+                                        return
+                                    ctx.beginPath()
+                                    ctx.strokeStyle = drawColor.toString()
+                                    ctx.globalAlpha = drawOpacity / 100.0
+                                    ctx.lineWidth = drawWidth
+                                    ctx.lineCap = "round"
+                                    ctx.lineJoin = "round"
+                                    ctx.moveTo(pageDelegate.localInkPoints[0] * width, pageDelegate.localInkPoints[1] * height)
+                                    for (var i = 2; i + 1 < pageDelegate.localInkPoints.length; i += 2)
+                                        ctx.lineTo(pageDelegate.localInkPoints[i] * width, pageDelegate.localInkPoints[i + 1] * height)
+                                    ctx.stroke()
+                                }
+                            }
+
+                            Rectangle {
+                                id: dragPreview
+                                z: 15
+                                visible: interactionArea.pressed && (tool === "select" || tool === "highlight" || tool === "redact" || tool === "crop")
+                                x: Math.min(pageDelegate.pressX, interactionArea.mouseX)
+                                y: Math.min(pageDelegate.pressY, interactionArea.mouseY)
+                                width: Math.abs(interactionArea.mouseX - pageDelegate.pressX)
+                                height: Math.abs(interactionArea.mouseY - pageDelegate.pressY)
+                                color: tool === "redact" ? "#33dc2626" : tool === "crop" ? "#22059669" : tool === "highlight" ? "#33f59e0b" : "#263b82f6"
+                                border.width: 2
+                                border.color: tool === "redact" ? redactToolColor : tool === "crop" ? cropToolColor : tool === "highlight" ? highlightToolColor : pointerColor
+                            }
+
+                            Rectangle {
+                                id: pendingOverlay
+                                z: 30
+                                visible: pendingActionPage === index
+                                x: pendingActionRect.x * pageSurface.width
+                                y: pendingActionRect.y * pageSurface.height
+                                width: pendingActionRect.w * pageSurface.width
+                                height: pendingActionRect.h * pageSurface.height
+                                color: pendingActionTool === "redact" ? "#44dc2626" : "#22059669"
+                                border.width: 2
+                                border.color: pendingActionTool === "redact" ? redactToolColor : cropToolColor
+
+                                Repeater {
+                                    model: pendingActionTool === "crop" ? 4 : 0
+                                    delegate: Rectangle {
+                                        required property int index
+                                        width: 12
+                                        height: 12
+                                        radius: 6
+                                        color: "white"
+                                        border.color: cropToolColor
+                                        border.width: 2
+                                        x: (index === 0 || index === 2) ? -width / 2 : pendingOverlay.width - width / 2
+                                        y: (index === 0 || index === 1) ? -height / 2 : pendingOverlay.height - height / 2
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            preventStealing: true
+                                            cursorShape: Qt.SizeFDiagCursor
+                                            onPositionChanged: function(mouse) {
+                                                if (!pressed)
+                                                    return
+                                                var p = parent.mapToItem(pageSurface, mouse.x, mouse.y)
+                                                var nx = Math.max(0, Math.min(1, p.x / Math.max(1, pageSurface.width)))
+                                                var ny = Math.max(0, Math.min(1, p.y / Math.max(1, pageSurface.height)))
+                                                var r = pendingActionRect
+                                                var x2 = r.x + r.w
+                                                var y2 = r.y + r.h
+                                                if (index === 0) pendingActionRect = ({"x": Math.min(nx, x2 - 0.03), "y": Math.min(ny, y2 - 0.03), "w": Math.max(0.03, x2 - nx), "h": Math.max(0.03, y2 - ny)})
+                                                else if (index === 1) pendingActionRect = ({"x": r.x, "y": Math.min(ny, y2 - 0.03), "w": Math.max(0.03, nx - r.x), "h": Math.max(0.03, y2 - ny)})
+                                                else if (index === 2) pendingActionRect = ({"x": Math.min(nx, x2 - 0.03), "y": r.y, "w": Math.max(0.03, x2 - nx), "h": Math.max(0.03, ny - r.y)})
+                                                else pendingActionRect = ({"x": r.x, "y": r.y, "w": Math.max(0.03, nx - r.x), "h": Math.max(0.03, ny - r.y)})
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            MouseArea {
+                                id: interactionArea
+                                z: 20
+                                anchors.fill: parent
+                                acceptedButtons: Qt.LeftButton
+                                enabled: pendingActionPage < 0 && (tool === "select" || !pdfDocument.locked) && !(Qt.platform.os === "android" && tool === "select")
+                                hoverEnabled: true
+                                preventStealing: true
+                                cursorShape: tool === "text" ? Qt.IBeamCursor : tool === "draw" ? Qt.CrossCursor : tool === "redact" || tool === "crop" || tool === "highlight" ? Qt.CrossCursor : Qt.IBeamCursor
+
+                                onPressed: function(mouse) {
+                                    pdfDocument.currentPage = index
+                                    pageDelegate.pressX = mouse.x
+                                    pageDelegate.pressY = mouse.y
+                                    if (tool === "text") {
+                                        textDlg.nx = mouse.x / Math.max(1, width)
+                                        textDlg.ny = mouse.y / Math.max(1, height)
+                                        textDlg.open()
+                                    } else if (tool === "draw") {
+                                        pageDelegate.localInkPoints = [mouse.x / Math.max(1, width), mouse.y / Math.max(1, height)]
+                                        pageDelegate.drawingInk = true
+                                        liveInk.requestPaint()
+                                    }
+                                }
+
+                                onPositionChanged: function(mouse) {
+                                    if (pressed && tool === "draw" && pageDelegate.drawingInk) {
+                                        var next = pageDelegate.localInkPoints.slice(0)
+                                        next.push(mouse.x / Math.max(1, width))
+                                        next.push(mouse.y / Math.max(1, height))
+                                        pageDelegate.localInkPoints = next
+                                        liveInk.requestPaint()
+                                    }
+                                }
+
+                                onReleased: function(mouse) {
+                                    if (tool === "draw") {
+                                        if (pageDelegate.localInkPoints.length >= 4)
+                                            pdfDocument.addInkStyled(index, pageDelegate.localInkPoints, drawColor.toString(), Math.max(0.0006, drawWidth / Math.max(1, pageSurface.width)), drawOpacity)
+                                        pageDelegate.localInkPoints = []
+                                        pageDelegate.drawingInk = false
+                                        liveInk.requestPaint()
+                                    } else if (tool === "select") {
+                                        pageDelegate.finishTextDrag(mouse, false)
+                                    } else if (tool === "highlight") {
+                                        pageDelegate.finishTextDrag(mouse, true)
+                                    } else if (tool === "redact" || tool === "crop") {
+                                        var r = pageDelegate.normalizedRect(pageDelegate.pressX, pageDelegate.pressY, mouse.x, mouse.y)
+                                        if (r.w >= 0.01 && r.h >= 0.01) {
+                                            pendingActionPage = index
+                                            pendingActionTool = tool
+                                            pendingActionRect = r
+                                        }
+                                    }
+                                }
+
+                                onWheel: function(wheel) {
+                                    var delta = wheel.pixelDelta.y !== 0 ? wheel.pixelDelta.y : wheel.angleDelta.y / 2
+                                    var maxY = Math.max(0, documentView.contentHeight - documentView.height)
+                                    documentView.contentY = Math.max(0, Math.min(maxY, documentView.contentY - delta))
+                                    wheel.accepted = true
+                                }
+
+                                onCanceled: {
+                                    pageDelegate.localInkPoints = []
+                                    pageDelegate.drawingInk = false
+                                    liveInk.requestPaint()
+                                }
+                            }
+
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.top: parent.top
+                                anchors.margins: 8
+                                width: pageBadge.implicitWidth + 14
+                                height: 24
+                                radius: 12
+                                color: index === pdfDocument.currentPage ? accentColor : "#990f172a"
+                                Label { id: pageBadge; anchors.centerIn: parent; text: i18n.number(index + 1); color: "white"; font.pixelSize: 10; font.bold: true }
                             }
                         }
                     }
+
+                    footer: Item { width: documentView.width; height: 30 }
                 }
             }
 
@@ -1370,7 +1729,7 @@ ApplicationWindow {
                     Rectangle { Layout.fillWidth: true; height: 1; color: borderColor }
                     Label { text: tx("section.security"); font.bold: true; color: mutedColor }
                     Switch { text: tx("action.lock_now"); checked: pdfDocument.locked; onToggled: pdfDocument.setLocked(checked) }
-                    Button { text: tx("action.redact"); Layout.fillWidth: true; onClicked: tool = "redact" }
+                    Button { text: tx("action.redact"); Layout.fillWidth: true; onClicked: chooseTool("redact") }
                     Button { text: tx("action.password_permissions"); enabled: providersState.qpdf; Layout.fillWidth: true; onClicked: securityDlg.open() }
                     Label { text: tx("security.explanation"); wrapMode: Text.WordWrap; Layout.fillWidth: true; color: mutedColor; font.pixelSize: 11 }
                     Item { Layout.fillHeight: true }

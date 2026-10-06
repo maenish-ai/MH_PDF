@@ -167,18 +167,34 @@ void PageModel::putCache(const QString &key, const QImage &image) const {
     touchCacheKey(key);
 }
 
+double PageModel::maxPageWidth() const {
+    double result = 595.0;
+    for (const auto &page : m_pages)
+        result = qMax(result, page.points.width());
+    return result;
+}
+
+double PageModel::maxPageHeight() const {
+    double result = 842.0;
+    for (const auto &page : m_pages)
+        result = qMax(result, page.points.height());
+    return result;
+}
+
 QImage PageModel::renderPage(int row, const QSize &requestedSize) const {
     if (row < 0 || row >= m_pages.size())
         return {};
 
-    const PageItem &page = m_pages[row];
+    // Render from a short-lived snapshot so asynchronous QML image requests do
+    // not keep references into the mutable page vector while the UI is editing.
+    const PageItem page = m_pages.at(row);
     QSize size = requestedSize;
     if (!size.isValid() || size.width() < 2 || size.height() < 2)
         size = defaultPixelSize(page);
     size.setWidth(qBound(64, size.width(), MemoryPolicy::maxRenderDimension()));
     size.setHeight(qBound(64, size.height(), MemoryPolicy::maxRenderDimension()));
 
-    const QString key = cacheKey(row, size);
+    const QString key = QStringLiteral("%1:%2:%3x%4").arg(page.uid).arg(page.revision).arg(size.width()).arg(size.height());
     if (const auto it = m_cache.find(key); it != m_cache.end()) {
         touchCacheKey(key);
         return it->image;

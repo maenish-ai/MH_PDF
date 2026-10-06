@@ -36,6 +36,7 @@ jobs:
           python tests/engine_v7_audit.py
           python tests/security_audit.py
           python tests/performance_audit.py
+          python tests/interaction_audit.py
           python tests/open_source_audit.py
           python -m compileall -q tests
 
@@ -144,6 +145,29 @@ jobs:
             }
           }
           Stop-Process -Id $proc.Id -Force
+
+      - name: Exercise text selection drawing crop and redaction engine
+        shell: pwsh
+        run: |
+          python scripts/create_smoke_pdf.py "$PWD\windows-interaction-smoke.pdf"
+          Remove-Item Env:QT_QPA_PLATFORM -ErrorAction SilentlyContinue
+          Remove-Item Env:QT_QUICK_BACKEND -ErrorAction SilentlyContinue
+          $log = Join-Path $env:LOCALAPPDATA "MaenPDF\MaenPDF\logs\maenpdf.log"
+          Remove-Item $log -Force -ErrorAction SilentlyContinue
+          $fixture = (Resolve-Path "$PWD\windows-interaction-smoke.pdf").Path
+          $proc = Start-Process -FilePath "$PWD\dist\MaenPDF.exe" -ArgumentList @('--interaction-smoke', $fixture) -WorkingDirectory "$PWD\dist" -Wait -PassThru
+          if ($proc.ExitCode -ne 0) {
+            if (Test-Path $log) { Get-Content $log -Tail 250 | Write-Host }
+            throw "MaenPDF interaction smoke test failed with code $($proc.ExitCode)"
+          }
+          if (!(Test-Path $log)) { throw "Interaction smoke test did not create its log" }
+          $logText = Get-Content $log -Raw
+          $logText | Write-Host
+          if ($logText -notmatch 'INTERACTION_SMOKE_PASS') { throw "Interaction smoke test did not confirm the editing engine" }
+          $fatalPatterns = @('Cannot assign to non-existent property','ReferenceError:','TypeError:','\[FATAL\]')
+          foreach ($pattern in $fatalPatterns) {
+            if ($logText -match $pattern) { throw "Runtime error detected during interaction smoke test: $pattern" }
+          }
 
       - name: Build Windows installer
         shell: pwsh

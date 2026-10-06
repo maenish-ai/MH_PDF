@@ -1,6 +1,7 @@
 #include "DocumentManager.h"
 #include "AppSettings.h"
 #include "PdfDocument.h"
+#include <QTimer>
 
 DocumentManager::DocumentManager(AppSettings *settings, QObject *parent)
     : QObject(parent), m_settings(settings) {
@@ -119,7 +120,10 @@ bool DocumentManager::closeTab(int index) {
     }
 
     PdfDocument *victim = m_documents.takeAt(index);
-    victim->deleteLater();
+    // Image-provider requests can finish on a low-priority worker thread. Keep
+    // a closed document alive briefly so an in-flight render cannot observe a
+    // freed page model. The QObject parent still guarantees final cleanup.
+    QTimer::singleShot(30000, victim, [victim] { victim->deleteLater(); });
     if (m_currentIndex >= m_documents.size())
         m_currentIndex = m_documents.size() - 1;
     else if (index < m_currentIndex)
@@ -143,7 +147,7 @@ bool DocumentManager::closeOtherTabs(int keepIndex) {
         if (i == keepIndex)
             continue;
         PdfDocument *victim = m_documents.takeAt(i);
-        victim->deleteLater();
+        QTimer::singleShot(30000, victim, [victim] { victim->deleteLater(); });
     }
     m_currentIndex = m_documents.indexOf(keep);
     emit tabsChanged();

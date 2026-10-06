@@ -58,6 +58,8 @@ public:
     Q_INVOKABLE QString imageSource(int row) const { return imageUrlForRow(row); }
     Q_INVOKABLE double pageWidth(int row) const { const auto *p = page(row); return p ? p->points.width() : 595.0; }
     Q_INVOKABLE double pageHeight(int row) const { const auto *p = page(row); return p ? p->points.height() : 842.0; }
+    Q_INVOKABLE double maxPageWidth() const;
+    Q_INVOKABLE double maxPageHeight() const;
     QImage renderPage(int index, const QSize &requestedSize = {}) const;
     QVariantMap cacheStats() const;
     void clearCache() const;
