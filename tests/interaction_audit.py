@@ -11,7 +11,7 @@ fixture = (root / 'scripts/create_smoke_pdf.py').read_text(encoding='utf-8')
 
 checks = {
     'continuous vertical viewer': 'id: documentView' in qml and 'orientation: ListView.Vertical' in qml,
-    'viewer is virtualized': 'reuseItems: true' in qml and 'cacheBuffer: appSettings.performanceProfile' in qml,
+    'viewer is virtualized': 'reuseItems: true' in qml and 'cacheBuffer: zoomRenderTimer.running ? 0' in qml,
     'wheel explicitly scrolls document': 'onWheel: function(wheel)' in qml and 'documentView.contentY' in qml,
     'ctrl wheel zoom': 'wheel.modifiers & Qt.ControlModifier' in qml and 'zoomIn()' in qml and 'zoomOut()' in qml,
     'viewport tracks current page': 'onContentYChanged:' in qml and 'pdfDocument.currentPage = idx' in qml,
@@ -41,6 +41,13 @@ checks = {
     'three-page CI fixture': '/Count 3' in fixture,
     'runtime interaction smoke gate': '--interaction-smoke' in ci and 'INTERACTION_SMOKE_PASS' in ci,
     'runtime text delete smoke': 'INTERACTION_SMOKE_TEXT_DELETE_FAILED' in (root/'app/main.cpp').read_text(encoding='utf-8'),
+    'runtime undo redo smoke': 'INTERACTION_SMOKE_UNDO_MISSING' in (root/'app/main.cpp').read_text(encoding='utf-8') and 'INTERACTION_SMOKE_REDO_MISSING' in (root/'app/main.cpp').read_text(encoding='utf-8'),
+    'zoom render debounce prevents render storms': 'id: zoomRenderTimer' in qml and 'property real renderZoom' in qml and 'sourceSize.width: Math.max(64, Math.round(pageWidth * renderZoom))' in qml,
+    'inserted text movable and resizable': 'moveTextAnnotation' in h and 'resizeTextAnnotation' in h and 'drag.target: textOverlaySelection' in qml,
+    'inserted text can be edited and partially struck': 'updateTextAnnotation' in h and 'strikeStart' in (root/'core/PageModel.h').read_text(encoding='utf-8') and 'action.strike_selected_text' in qml,
+    'forms menu is functional': 'addFormField' in h and 'updateFormField' in h and 'deleteFormField' in h and 'chooseTool("formText")' in qml and 'chooseTool("formFill")' in qml,
+    'PDF focus mode hides chrome not OS window': 'property bool pdfFocusMode' in qml and 'visible: !pdfFocusMode' in qml and 'Window.FullScreen' not in qml,
+    'dark theme keeps paper white': 'id: pageSurface' in qml and 'color: "white"' in qml and 'width: 104; height: 147; color: "white"' in qml,
 }
 
 for name, ok in checks.items():

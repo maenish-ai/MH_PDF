@@ -720,9 +720,30 @@ bool PdfDocument::writeRecoveryJournal() {
             textObject.insert(QStringLiteral("height"), textItem.height);
             textObject.insert(QStringLiteral("fontSize"), textItem.fontSize);
             textObject.insert(QStringLiteral("color"), textItem.color);
+            textObject.insert(QStringLiteral("strikeStart"), textItem.strikeStart);
+            textObject.insert(QStringLiteral("strikeLength"), textItem.strikeLength);
             textItems.append(textObject);
         }
         item.insert(QStringLiteral("textItems"), textItems);
+        QJsonArray formItems;
+        for (const FormOverlayItem &formItem : page->formItems) {
+            QJsonObject formObject;
+            formObject.insert(QStringLiteral("id"), formItem.id);
+            formObject.insert(QStringLiteral("type"), formItem.type);
+            formObject.insert(QStringLiteral("label"), formItem.label);
+            formObject.insert(QStringLiteral("value"), formItem.value);
+            QJsonArray options;
+            for (const QString &option : formItem.options) options.append(option);
+            formObject.insert(QStringLiteral("options"), options);
+            formObject.insert(QStringLiteral("x"), formItem.x);
+            formObject.insert(QStringLiteral("y"), formItem.y);
+            formObject.insert(QStringLiteral("width"), formItem.width);
+            formObject.insert(QStringLiteral("height"), formItem.height);
+            formObject.insert(QStringLiteral("checked"), formItem.checked);
+            formObject.insert(QStringLiteral("selectedIndex"), formItem.selectedIndex);
+            formItems.append(formObject);
+        }
+        item.insert(QStringLiteral("formItems"), formItems);
         if (!page->base.isNull())
             item.insert(QStringLiteral("basePng"), encodeRecoveryImage(page->base));
         if (!page->overlay.isNull())
@@ -812,8 +833,28 @@ bool PdfDocument::recoverAutosave() {
             textItem.height = textObject.value(QStringLiteral("height")).toDouble(0.03);
             textItem.fontSize = textObject.value(QStringLiteral("fontSize")).toInt(18);
             textItem.color = textObject.value(QStringLiteral("color")).toString(QStringLiteral("#111827"));
+            textItem.strikeStart = textObject.value(QStringLiteral("strikeStart")).toInt(-1);
+            textItem.strikeLength = textObject.value(QStringLiteral("strikeLength")).toInt(0);
             if (!textItem.text.isEmpty())
                 page.textItems.push_back(std::move(textItem));
+        }
+        const QJsonArray formItems = item.value(QStringLiteral("formItems")).toArray();
+        for (const QJsonValue &formValue : formItems) {
+            const QJsonObject formObject = formValue.toObject();
+            FormOverlayItem formItem;
+            formItem.id = formObject.value(QStringLiteral("id")).toString();
+            if (formItem.id.isEmpty()) formItem.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+            formItem.type = formObject.value(QStringLiteral("type")).toString(QStringLiteral("text"));
+            formItem.label = formObject.value(QStringLiteral("label")).toString();
+            formItem.value = formObject.value(QStringLiteral("value")).toString();
+            for (const QJsonValue &option : formObject.value(QStringLiteral("options")).toArray()) formItem.options.push_back(option.toString());
+            formItem.x = formObject.value(QStringLiteral("x")).toDouble(0.15);
+            formItem.y = formObject.value(QStringLiteral("y")).toDouble(0.20);
+            formItem.width = formObject.value(QStringLiteral("width")).toDouble(0.25);
+            formItem.height = formObject.value(QStringLiteral("height")).toDouble(0.045);
+            formItem.checked = formObject.value(QStringLiteral("checked")).toBool(false);
+            formItem.selectedIndex = formObject.value(QStringLiteral("selectedIndex")).toInt(0);
+            page.formItems.push_back(std::move(formItem));
         }
         page.base = decodeRecoveryImage(item.value(QStringLiteral("basePng")).toString());
         page.overlay = decodeRecoveryImage(item.value(QStringLiteral("overlayPng")).toString());
@@ -1078,6 +1119,24 @@ void PdfDocument::rotatePage(int index, int degrees) {
             item.width = qBound(0.01, newRight - newLeft, 1.0 - item.x);
             item.height = qBound(0.01, newBottom - newTop, item.y);
         }
+        for (FormOverlayItem &item : after.formItems) {
+            auto rotatePoint = [normalizedDegrees](const QPointF &point) {
+                if (normalizedDegrees == 90) return QPointF(1.0 - point.y(), point.x());
+                if (normalizedDegrees == 180) return QPointF(1.0 - point.x(), 1.0 - point.y());
+                if (normalizedDegrees == 270) return QPointF(point.y(), 1.0 - point.x());
+                return point;
+            };
+            const QPointF a = rotatePoint(QPointF(item.x, item.y));
+            const QPointF b = rotatePoint(QPointF(item.x + item.width, item.y + item.height));
+            const double newLeft = qMin(a.x(), b.x());
+            const double newTop = qMin(a.y(), b.y());
+            const double newRight = qMax(a.x(), b.x());
+            const double newBottom = qMax(a.y(), b.y());
+            item.x = qBound(0.0, newLeft, 0.99);
+            item.y = qBound(0.0, newTop, 0.99);
+            item.width = qBound(0.01, newRight - newLeft, 1.0 - item.x);
+            item.height = qBound(0.01, newBottom - newTop, 1.0 - item.y);
+        }
     }
     if (normalizedDegrees == 90 || normalizedDegrees == 270)
         after.points = QSizeF(before.points.height(), before.points.width());
@@ -1180,9 +1239,213 @@ QVariantList PdfDocument::textAnnotations(int pageIndex) const {
         row.insert(QStringLiteral("w"), item.width);
         row.insert(QStringLiteral("h"), item.height);
         row.insert(QStringLiteral("fontSize"), item.fontSize);
+        row.insert(QStringLiteral("strikeStart"), item.strikeStart);
+        row.insert(QStringLiteral("strikeLength"), item.strikeLength);
         result.push_back(row);
     }
     return result;
+}
+
+QVariantMap PdfDocument::textAnnotation(int pageIndex, const QString &id) const {
+    const auto *page = m_pages.page(pageIndex);
+    if (!page || id.isEmpty())
+        return {};
+    for (const TextOverlayItem &item : page->textItems) {
+        if (item.id != id)
+            continue;
+        return {{QStringLiteral("id"), item.id},
+                {QStringLiteral("text"), item.text},
+                {QStringLiteral("x"), item.x},
+                {QStringLiteral("y"), qBound(0.0, item.y - item.height, 1.0)},
+                {QStringLiteral("baselineY"), item.y},
+                {QStringLiteral("w"), item.width},
+                {QStringLiteral("h"), item.height},
+                {QStringLiteral("fontSize"), item.fontSize},
+                {QStringLiteral("strikeStart"), item.strikeStart},
+                {QStringLiteral("strikeLength"), item.strikeLength}};
+    }
+    return {};
+}
+
+bool PdfDocument::updateTextAnnotation(int pageIndex, const QString &id, const QString &text,
+                                       double x, double y, int fontSize, int strikeStart, int strikeLength) {
+    if (m_locked || id.isEmpty() || text.isEmpty())
+        return false;
+    auto *page = m_pages.page(pageIndex);
+    if (!page)
+        return false;
+    int at = -1;
+    for (int i = 0; i < page->textItems.size(); ++i) {
+        if (page->textItems[i].id == id) { at = i; break; }
+    }
+    if (at < 0)
+        return false;
+
+    const TextOverlayItem before = page->textItems[at];
+    TextOverlayItem after = before;
+    after.text = text;
+    after.x = qBound(0.0, x, 0.98);
+    after.fontSize = qBound(8, fontSize, 144);
+    const int textSize = int(after.text.size());
+    after.strikeStart = qBound(-1, strikeStart, textSize);
+    after.strikeLength = after.strikeStart < 0 ? 0 : qBound(0, strikeLength, textSize - after.strikeStart);
+
+    QFont metricsFont;
+    metricsFont.setPixelSize(after.fontSize);
+    const QFontMetricsF metrics(metricsFont);
+    const qreal pageWidth = qMax<qreal>(1.0, page->points.width());
+    const qreal pageHeight = qMax<qreal>(1.0, page->points.height());
+    after.width = qBound(0.015, metrics.horizontalAdvance(after.text) / pageWidth, qMax(0.015, 0.98 - after.x));
+    after.height = qBound(0.012, metrics.height() / pageHeight, 0.20);
+    // QML supplies the top edge while the renderer stores a baseline.
+    after.y = qBound(after.height, y + after.height, 1.0);
+
+    if (before.text == after.text && qFuzzyCompare(before.x + 1.0, after.x + 1.0)
+        && qFuzzyCompare(before.y + 1.0, after.y + 1.0) && before.fontSize == after.fontSize
+        && before.strikeStart == after.strikeStart && before.strikeLength == after.strikeLength)
+        return true;
+
+    page->textItems[at] = after;
+    m_pages.changed(pageIndex);
+    markModified();
+    m_undo.push(new LambdaCommand(QStringLiteral("Edit inserted text"),
+        [this, pageIndex, at, before] {
+            if (auto *p = m_pages.page(pageIndex); p && at >= 0 && at < p->textItems.size()) {
+                p->textItems[at] = before; m_pages.changed(pageIndex); markModified();
+            }
+        },
+        [this, pageIndex, at, after] {
+            if (auto *p = m_pages.page(pageIndex); p && at >= 0 && at < p->textItems.size()) {
+                p->textItems[at] = after; m_pages.changed(pageIndex); markModified();
+            }
+        }, true));
+    return true;
+}
+
+bool PdfDocument::moveTextAnnotation(int pageIndex, const QString &id, double x, double y) {
+    const QVariantMap item = textAnnotation(pageIndex, id);
+    if (item.isEmpty()) return false;
+    return updateTextAnnotation(pageIndex, id, item.value(QStringLiteral("text")).toString(), x, y,
+                                item.value(QStringLiteral("fontSize")).toInt(),
+                                item.value(QStringLiteral("strikeStart")).toInt(-1),
+                                item.value(QStringLiteral("strikeLength")).toInt(0));
+}
+
+bool PdfDocument::resizeTextAnnotation(int pageIndex, const QString &id, int fontSize) {
+    const QVariantMap item = textAnnotation(pageIndex, id);
+    if (item.isEmpty()) return false;
+    return updateTextAnnotation(pageIndex, id, item.value(QStringLiteral("text")).toString(),
+                                item.value(QStringLiteral("x")).toDouble(), item.value(QStringLiteral("y")).toDouble(),
+                                fontSize, item.value(QStringLiteral("strikeStart")).toInt(-1),
+                                item.value(QStringLiteral("strikeLength")).toInt(0));
+}
+
+QString PdfDocument::addFormField(int pageIndex, const QString &type, double x, double y, double w, double h) {
+    if (m_locked)
+        return {};
+    auto *page = m_pages.page(pageIndex);
+    if (!page)
+        return {};
+    QString kind = type.trimmed().toLower();
+    if (kind != QStringLiteral("text") && kind != QStringLiteral("checkbox")
+        && kind != QStringLiteral("radio") && kind != QStringLiteral("dropdown"))
+        return {};
+
+    FormOverlayItem item;
+    item.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    item.type = kind;
+    item.x = qBound(0.0, x, 0.95);
+    item.y = qBound(0.0, y, 0.95);
+    item.width = qBound(0.025, w, 1.0 - item.x);
+    item.height = qBound(0.025, h, 1.0 - item.y);
+    if (kind == QStringLiteral("checkbox") || kind == QStringLiteral("radio")) {
+        item.width = qMin(item.width, 0.045);
+        item.height = qMin(item.height, 0.045);
+    }
+    if (kind == QStringLiteral("dropdown")) {
+        item.options = {QStringLiteral("Option 1"), QStringLiteral("Option 2"), QStringLiteral("Option 3")};
+        item.value = item.options.first();
+    }
+    const int at = page->formItems.size();
+    page->formItems.push_back(item);
+    m_pages.changed(pageIndex);
+    markModified();
+    m_undo.push(new LambdaCommand(QStringLiteral("Add form field"),
+        [this, pageIndex, id = item.id] {
+            if (auto *p = m_pages.page(pageIndex)) {
+                for (int i = 0; i < p->formItems.size(); ++i) if (p->formItems[i].id == id) {
+                    p->formItems.removeAt(i); m_pages.changed(pageIndex); markModified(); break;
+                }
+            }
+        },
+        [this, pageIndex, item, at] {
+            if (auto *p = m_pages.page(pageIndex)) {
+                p->formItems.insert(qBound(0, at, p->formItems.size()), item); m_pages.changed(pageIndex); markModified();
+            }
+        }, true));
+    return item.id;
+}
+
+QVariantList PdfDocument::formAnnotations(int pageIndex) const {
+    QVariantList result;
+    const auto *page = m_pages.page(pageIndex);
+    if (!page) return result;
+    for (const FormOverlayItem &item : page->formItems) {
+        QVariantMap row{{QStringLiteral("id"), item.id}, {QStringLiteral("type"), item.type},
+                        {QStringLiteral("label"), item.label}, {QStringLiteral("value"), item.value},
+                        {QStringLiteral("options"), item.options}, {QStringLiteral("x"), item.x},
+                        {QStringLiteral("y"), item.y}, {QStringLiteral("w"), item.width},
+                        {QStringLiteral("h"), item.height}, {QStringLiteral("checked"), item.checked},
+                        {QStringLiteral("selectedIndex"), item.selectedIndex}};
+        result.push_back(row);
+    }
+    return result;
+}
+
+QVariantMap PdfDocument::formAnnotation(int pageIndex, const QString &id) const {
+    const QVariantList items = formAnnotations(pageIndex);
+    for (const QVariant &value : items) {
+        const QVariantMap item = value.toMap();
+        if (item.value(QStringLiteral("id")).toString() == id) return item;
+    }
+    return {};
+}
+
+bool PdfDocument::updateFormField(int pageIndex, const QString &id, const QString &value, bool checked, int selectedIndex) {
+    if (m_locked || id.isEmpty()) return false;
+    auto *page = m_pages.page(pageIndex);
+    if (!page) return false;
+    int at = -1;
+    for (int i = 0; i < page->formItems.size(); ++i) if (page->formItems[i].id == id) { at = i; break; }
+    if (at < 0) return false;
+    const FormOverlayItem before = page->formItems[at];
+    FormOverlayItem after = before;
+    after.value = value;
+    after.checked = checked;
+    if (!after.options.isEmpty()) {
+        after.selectedIndex = qBound(0, selectedIndex, int(after.options.size()) - 1);
+        if (after.type == QStringLiteral("dropdown")) after.value = after.options.value(after.selectedIndex);
+    }
+    page->formItems[at] = after;
+    m_pages.changed(pageIndex); markModified();
+    m_undo.push(new LambdaCommand(QStringLiteral("Edit form field"),
+        [this, pageIndex, at, before] { if (auto *p = m_pages.page(pageIndex); p && at < p->formItems.size()) { p->formItems[at] = before; m_pages.changed(pageIndex); markModified(); } },
+        [this, pageIndex, at, after] { if (auto *p = m_pages.page(pageIndex); p && at < p->formItems.size()) { p->formItems[at] = after; m_pages.changed(pageIndex); markModified(); } }, true));
+    return true;
+}
+
+bool PdfDocument::deleteFormField(int pageIndex, const QString &id) {
+    if (m_locked || id.isEmpty()) return false;
+    auto *page = m_pages.page(pageIndex);
+    if (!page) return false;
+    int at = -1; FormOverlayItem removed;
+    for (int i = 0; i < page->formItems.size(); ++i) if (page->formItems[i].id == id) { at = i; removed = page->formItems[i]; break; }
+    if (at < 0) return false;
+    page->formItems.removeAt(at); m_pages.changed(pageIndex); markModified();
+    m_undo.push(new LambdaCommand(QStringLiteral("Delete form field"),
+        [this, pageIndex, at, removed] { if (auto *p = m_pages.page(pageIndex)) { p->formItems.insert(qBound(0, at, p->formItems.size()), removed); m_pages.changed(pageIndex); markModified(); } },
+        [this, pageIndex, id] { if (auto *p = m_pages.page(pageIndex)) { for (int i=0;i<p->formItems.size();++i) if (p->formItems[i].id==id) { p->formItems.removeAt(i); m_pages.changed(pageIndex); markModified(); break; } } }, true));
+    return true;
 }
 
 bool PdfDocument::deleteTextAnnotation(int pageIndex, const QString &id) {
@@ -1231,39 +1494,68 @@ bool PdfDocument::deleteTextAnnotation(int pageIndex, const QString &id) {
 }
 
 void PdfDocument::addHighlight(int pageIndex, double x, double y, double width, double height) {
-    if (m_locked) return;
-    auto *page = m_pages.page(pageIndex); if (!page) return;
-    ensureOverlay(page);
-    const QImage before = page->overlay;
-    QImage after = before;
-    QPainter painter(&after);
-    painter.fillRect(QRectF(x * after.width(), y * after.height(), width * after.width(), height * after.height()), QColor(255, 215, 64, 105));
-    painter.end();
-    snapshotCommand(pageIndex, before, after, QStringLiteral("Highlight"));
+    QVariantMap rect{{QStringLiteral("x"), x}, {QStringLiteral("y"), y},
+                     {QStringLiteral("w"), width}, {QStringLiteral("h"), height}};
+    addHighlightRects(pageIndex, QVariantList{rect}, QStringLiteral("#FFD740"), 42);
 }
-
 
 void PdfDocument::addHighlightRects(int pageIndex, const QVariantList &rects, const QString &color, int opacity) {
     if (m_locked || rects.isEmpty()) return;
     auto *page = m_pages.page(pageIndex); if (!page) return;
     ensureOverlay(page);
-    const QImage before = page->overlay;
-    QImage after = before;
+
     QColor fill(color);
     if (!fill.isValid()) fill = QColor(QStringLiteral("#FFD740"));
     fill.setAlpha(qBound(5, opacity, 100) * 255 / 100);
-    QPainter painter(&after);
+
+    QVector<QRectF> normalizedRects;
+    QRect pixelBounds;
     for (const QVariant &value : rects) {
         const QVariantMap r = value.toMap();
         const qreal x = qBound(0.0, r.value(QStringLiteral("x")).toDouble(), 1.0);
         const qreal y = qBound(0.0, r.value(QStringLiteral("y")).toDouble(), 1.0);
         const qreal w = qBound(0.0, r.value(QStringLiteral("w")).toDouble(), 1.0 - x);
         const qreal h = qBound(0.0, r.value(QStringLiteral("h")).toDouble(), 1.0 - y);
-        if (w > 0.0005 && h > 0.0005)
-            painter.fillRect(QRectF(x * after.width(), y * after.height(), w * after.width(), h * after.height()), fill);
+        if (w <= 0.0005 || h <= 0.0005) continue;
+        const QRectF nr(x, y, w, h);
+        normalizedRects.push_back(nr);
+        const QRect px(qFloor(x * page->overlay.width()) - 2,
+                       qFloor(y * page->overlay.height()) - 2,
+                       qCeil(w * page->overlay.width()) + 4,
+                       qCeil(h * page->overlay.height()) + 4);
+        pixelBounds = pixelBounds.isNull() ? px : pixelBounds.united(px);
     }
-    painter.end();
-    snapshotCommand(pageIndex, before, after, QStringLiteral("Highlight text"));
+    pixelBounds = pixelBounds.intersected(page->overlay.rect());
+    if (normalizedRects.isEmpty() || pixelBounds.isEmpty()) return;
+
+    const QImage beforePatch = page->overlay.copy(pixelBounds);
+    auto paintRects = [](QImage &target, const QVector<QRectF> &items, const QColor &brush) {
+        QPainter painter(&target);
+        for (const QRectF &r : items)
+            painter.fillRect(QRectF(r.x() * target.width(), r.y() * target.height(),
+                                    r.width() * target.width(), r.height() * target.height()), brush);
+    };
+    paintRects(page->overlay, normalizedRects, fill);
+    m_pages.changed(pageIndex);
+    markModified();
+
+    m_undo.push(new LambdaCommand(QStringLiteral("Highlight text"),
+        [this, pageIndex, pixelBounds, beforePatch] {
+            if (auto *p = m_pages.page(pageIndex)) {
+                ensureOverlay(p);
+                QPainter restore(&p->overlay);
+                restore.setCompositionMode(QPainter::CompositionMode_Source);
+                restore.drawImage(pixelBounds.topLeft(), beforePatch);
+                restore.end();
+                m_pages.changed(pageIndex); markModified();
+            }
+        },
+        [this, pageIndex, normalizedRects, fill, paintRects] {
+            if (auto *p = m_pages.page(pageIndex)) {
+                ensureOverlay(p); paintRects(p->overlay, normalizedRects, fill);
+                m_pages.changed(pageIndex); markModified();
+            }
+        }, true));
 }
 
 void PdfDocument::addRedaction(int pageIndex, double x, double y, double width, double height) {
@@ -1276,12 +1568,35 @@ void PdfDocument::addRedaction(int pageIndex, double x, double y, double width, 
     const double nh = qBound(0.0, qAbs(height), 1.0 - ny);
     if (nw < 0.002 || nh < 0.002) return;
     ensureOverlay(page);
-    const QImage before = page->overlay;
-    QImage after = before;
-    QPainter painter(&after);
-    painter.fillRect(QRectF(nx * after.width(), ny * after.height(), nw * after.width(), nh * after.height()), Qt::black);
-    painter.end();
-    snapshotCommand(pageIndex, before, after, QStringLiteral("Secure flattened redaction"));
+    QRect patchRect(qFloor(nx * page->overlay.width()) - 2,
+                    qFloor(ny * page->overlay.height()) - 2,
+                    qCeil(nw * page->overlay.width()) + 4,
+                    qCeil(nh * page->overlay.height()) + 4);
+    patchRect = patchRect.intersected(page->overlay.rect());
+    if (patchRect.isEmpty()) return;
+    const QImage beforePatch = page->overlay.copy(patchRect);
+    auto paintRedaction = [nx, ny, nw, nh](QImage &target) {
+        QPainter painter(&target);
+        painter.fillRect(QRectF(nx * target.width(), ny * target.height(),
+                                nw * target.width(), nh * target.height()), Qt::black);
+    };
+    paintRedaction(page->overlay);
+    m_pages.changed(pageIndex); markModified();
+    m_undo.push(new LambdaCommand(QStringLiteral("Secure flattened redaction"),
+        [this, pageIndex, patchRect, beforePatch] {
+            if (auto *p = m_pages.page(pageIndex)) {
+                ensureOverlay(p);
+                QPainter restore(&p->overlay);
+                restore.setCompositionMode(QPainter::CompositionMode_Source);
+                restore.drawImage(patchRect.topLeft(), beforePatch);
+                restore.end(); m_pages.changed(pageIndex); markModified();
+            }
+        },
+        [this, pageIndex, paintRedaction] {
+            if (auto *p = m_pages.page(pageIndex)) {
+                ensureOverlay(p); paintRedaction(p->overlay); m_pages.changed(pageIndex); markModified();
+            }
+        }, true));
     emit info(QStringLiteral("info.redaction_added"), {});
 }
 
@@ -1319,6 +1634,7 @@ void PdfDocument::cropPage(int pageIndex, double x, double y, double width, doub
     after.pageNumber = false;
     after.batesText.clear();
     after.textItems.clear(); // crop result already contains flattened inserted text
+    after.formItems.clear(); // crop result already contains flattened form widgets
 
     m_undo.push(new LambdaCommand(QStringLiteral("Crop page"),
         [this, pageIndex, before] { if (auto *p = m_pages.page(pageIndex)) { *p = before; m_pages.changed(pageIndex); markModified(); } },

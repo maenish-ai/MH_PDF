@@ -1,4 +1,4 @@
-# MaenPDF 7.3.1 Keyboard Shortcuts
+# MaenPDF 7.4.0 Keyboard Shortcuts
 
 MaenPDF uses an **Acrobat-familiar** shortcut profile so people coming from Adobe Acrobat do not need to relearn common PDF navigation and tool commands. Standard Windows shortcuts are preserved where possible. Single-key tool shortcuts can be turned off in **Preferences**.
 
@@ -14,7 +14,7 @@ MaenPDF uses an **Acrobat-familiar** shortcut profile so people coming from Adob
 | Ctrl+Z | Undo |
 | Ctrl+Y / platform Redo | Redo |
 | Ctrl+C | Copy selected PDF text; otherwise copy current page |
-| Delete / Backspace | Delete selected MaenPDF inserted-text object |
+| Delete / Backspace | Delete selected MaenPDF text/form overlay object |
 | Ctrl+Shift+D | Delete current page |
 | Ctrl+Shift+T | Add blank page |
 | Ctrl+Shift+I | Insert/combine another PDF |
@@ -31,7 +31,7 @@ Delete and Backspace are deliberately disabled while typing in a text field, so 
 | Ctrl+0 | Fit page |
 | Ctrl+1 | Actual size (100%) |
 | Ctrl+2 | Fit width |
-| Ctrl+L | Full screen |
+| Ctrl+L | PDF Focus Mode (hide application chrome; keep the desktop window normal) |
 | Ctrl+Shift+N | Go to page |
 | Ctrl+Tab / Ctrl+Shift+Tab | Next / previous document tab |
 | F4 | Show/hide Pages sidebar |

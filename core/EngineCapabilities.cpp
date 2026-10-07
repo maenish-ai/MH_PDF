@@ -42,6 +42,10 @@ QVariantMap EngineCapabilities::current() {
     capabilities[QStringLiteral("lowMemoryMode")] = true;
     capabilities[QStringLiteral("adaptivePerformance")] = true;
     capabilities[QStringLiteral("removableInsertedText")] = true;
+    capabilities[QStringLiteral("movableResizableInsertedText")] = true;
+    capabilities[QStringLiteral("partialTextStrikeout")] = true;
+    capabilities[QStringLiteral("localFormFields")] = true;
+    capabilities[QStringLiteral("pdfFocusMode")] = true;
     capabilities[QStringLiteral("keyboardShortcutProfile")] = QStringLiteral("Acrobat-familiar");
     capabilities[QStringLiteral("lazyRendering")] = true;
     capabilities[QStringLiteral("renderCache")] = true;

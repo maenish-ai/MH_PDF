@@ -4,6 +4,7 @@
 #include <QPainter>
 #include <QColor>
 #include <QFont>
+#include <QFontMetricsF>
 #include <QMutexLocker>
 #include <QTransform>
 #include <QUuid>
@@ -203,7 +204,8 @@ QImage PageModel::renderPage(int row, const QSize &requestedSize) const {
     size.setHeight(qBound(64, size.height(), maxDim));
     // Bucket nearby zoom requests so wheel/pinch zoom does not create a new
     // full-size cached bitmap for every one-pixel size change.
-    const int bucket = 48;
+    const int bucket = MemoryPolicy::performanceProfile() == QStringLiteral("eco") ? 128
+                     : MemoryPolicy::performanceProfile() == QStringLiteral("balanced") ? 96 : 64;
     size.setWidth(qMin(maxDim, qMax(64, ((size.width() + bucket / 2) / bucket) * bucket)));
     size.setHeight(qMin(maxDim, qMax(64, ((size.height() + bucket / 2) / bucket) * bucket)));
 
@@ -251,7 +253,62 @@ QImage PageModel::renderPage(int row, const QSize &requestedSize) const {
         if (!color.isValid())
             color = QColor(QStringLiteral("#111827"));
         painter.setPen(color);
-        painter.drawText(QPointF(item.x * base.width(), item.y * base.height()), item.text);
+        const QPointF baseline(item.x * base.width(), item.y * base.height());
+        painter.drawText(baseline, item.text);
+        if (item.strikeStart >= 0 && item.strikeLength > 0 && item.strikeStart < item.text.size()) {
+            const int start = qBound(0, item.strikeStart, int(item.text.size()));
+            const int length = qBound(0, item.strikeLength, int(item.text.size()) - start);
+            const QFontMetricsF metrics(font);
+            const qreal prefix = metrics.horizontalAdvance(item.text.left(start));
+            const qreal strikeWidth = metrics.horizontalAdvance(item.text.mid(start, length));
+            const qreal strikeY = baseline.y() - metrics.xHeight() * 0.42;
+            QPen strikePen(color, qMax<qreal>(1.0, scale * 1.2));
+            painter.setPen(strikePen);
+            painter.drawLine(QPointF(baseline.x() + prefix, strikeY),
+                             QPointF(baseline.x() + prefix + strikeWidth, strikeY));
+        }
+    }
+
+    // Lightweight local form widgets. They remain structured in memory and are
+    // flattened only by the normal export path, so editing does not require a
+    // page-sized bitmap mutation.
+    for (const FormOverlayItem &form : page.formItems) {
+        QRectF box(form.x * base.width(), form.y * base.height(),
+                   form.width * base.width(), form.height * base.height());
+        if (box.width() < 4 || box.height() < 4) continue;
+        painter.save();
+        painter.setPen(QPen(QColor(QStringLiteral("#64748b")), qMax<qreal>(1.0, base.width() / 1000.0)));
+        painter.setBrush(QColor(255, 255, 255, 245));
+        painter.drawRoundedRect(box, qMin<qreal>(5.0, box.height() * 0.18), qMin<qreal>(5.0, box.height() * 0.18));
+        QFont formFont;
+        formFont.setPixelSize(qMax(9, qRound(box.height() * 0.52)));
+        painter.setFont(formFont);
+        painter.setPen(QColor(QStringLiteral("#172033")));
+        if (form.type == QStringLiteral("checkbox")) {
+            if (form.checked) {
+                QPen tickPen(QColor(QStringLiteral("#2563eb")), qMax<qreal>(2.0, box.width() * 0.08), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+                painter.setPen(tickPen);
+                painter.drawLine(QPointF(box.left() + box.width()*0.20, box.top() + box.height()*0.52),
+                                 QPointF(box.left() + box.width()*0.43, box.top() + box.height()*0.75));
+                painter.drawLine(QPointF(box.left() + box.width()*0.43, box.top() + box.height()*0.75),
+                                 QPointF(box.left() + box.width()*0.82, box.top() + box.height()*0.24));
+            }
+        } else if (form.type == QStringLiteral("radio")) {
+            painter.setBrush(Qt::NoBrush);
+            painter.drawEllipse(box.adjusted(box.width()*0.14, box.height()*0.14, -box.width()*0.14, -box.height()*0.14));
+            if (form.checked) {
+                painter.setBrush(QColor(QStringLiteral("#2563eb")));
+                painter.setPen(Qt::NoPen);
+                painter.drawEllipse(box.adjusted(box.width()*0.31, box.height()*0.31, -box.width()*0.31, -box.height()*0.31));
+            }
+        } else {
+            QString shown = form.value;
+            if (shown.isEmpty()) shown = form.type == QStringLiteral("dropdown") ? QStringLiteral("Select") : QStringLiteral("Text field");
+            painter.drawText(box.adjusted(6, 1, -6, -1), Qt::AlignVCenter | Qt::AlignLeft, shown);
+            if (form.type == QStringLiteral("dropdown"))
+                painter.drawText(box.adjusted(4, 1, -6, -1), Qt::AlignVCenter | Qt::AlignRight, QStringLiteral("▾"));
+        }
+        painter.restore();
     }
 
     if (!page.watermarkText.isEmpty() && page.watermarkOpacity > 0) {

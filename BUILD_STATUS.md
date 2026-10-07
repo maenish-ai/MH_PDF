@@ -1,4 +1,4 @@
-# MaenPDF 7.3.1 — Build Status
+# MaenPDF 7.4.0 — Build Status
 
 ## Local verification
 The source bundle must pass all source-level release gates before packaging:
@@ -14,19 +14,19 @@ The source bundle must pass all source-level release gates before packaging:
 
 Run `python scripts/preflight.py`.
 
-## 7.3.1 stability/performance changes
+## 7.4.0 zero-freeze/editing changes
 - Acrobat-familiar shortcut profile has a dedicated static audit, including text-input focus guards.
 - Inserted text deletion is covered by the native interaction smoke test.
 - Dialog/action references are audited so menu commands cannot silently point to missing dialog IDs.
 - Adaptive RAM profiles select conservative render/cache/undo budgets automatically on 4–6 GB machines.
 - Release hardening covers control-flow/DEP-ASLR on MSVC, stack protection/RELRO where supported, plus a Qt image allocation ceiling.
 - Incremental and spatially-decimated ink preview; no full stroke-array clone per pointer event.
-- Bounded undo history and reduced/quantized render cache.
+- Bounded undo history and reduced/quantized render cache. Rapid zoom is visually immediate but high-quality rendering is debounced; editing one page no longer invalidates every visible page image.
 - Serialized shared render cache for asynchronous image requests.
 - Idle-debounced lightweight recovery journal replaces timer-driven full-PDF recovery export.
 - Heavy optional local PDF tools have Qt Concurrent background entry points and a busy-state overlay.
 - Windows uses accelerated rendering by default with Safe Graphics fallback.
-- Windows interaction smoke includes a 2,000-point committed ink timing check.
+- Windows interaction smoke includes text selection/edit/move/resize/strikeout, all four local form-field types, Undo/Redo edit state, crop/redaction, and a 2,000-point committed ink timing check.
 - Standard CI no longer uploads a Windows Portable artifact.
 - Standard Android CI builds/verifies one installable test APK; the production Android Release workflow builds the persistently signed APK and Play AAB.
 

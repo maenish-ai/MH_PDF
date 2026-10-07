@@ -77,7 +77,7 @@ int main(int argc, char *argv[])
     QGuiApplication::setOrganizationName(QStringLiteral("MaenPDF"));
     QGuiApplication::setOrganizationDomain(QStringLiteral("maenpdf.local"));
     QGuiApplication::setApplicationName(QStringLiteral("MaenPDF"));
-    QGuiApplication::setApplicationVersion(QStringLiteral("7.3.1"));
+    QGuiApplication::setApplicationVersion(QStringLiteral("7.4.0"));
     AppLogger::install();
 
     // Bound image decoder allocations before any user-controlled image is
@@ -121,7 +121,7 @@ int main(int argc, char *argv[])
     QDir::setCurrent(QCoreApplication::applicationDirPath());
 
     AppLogger::write(QStringLiteral("INFO"),
-                     QStringLiteral("MaenPDF 7.3.1 startup; Qt %1; appDir=%2; cwd=%3; QT_QUICK_BACKEND=%4")
+                     QStringLiteral("MaenPDF 7.4.0 startup; Qt %1; appDir=%2; cwd=%3; QT_QUICK_BACKEND=%4")
                          .arg(QString::fromLatin1(qVersion()),
                               QCoreApplication::applicationDirPath(),
                               QDir::currentPath(),
@@ -188,6 +188,46 @@ int main(int argc, char *argv[])
                 AppLogger::write(QStringLiteral("FATAL"), QStringLiteral("INTERACTION_SMOKE_TEXT_DELETE_FAILED"));
                 return EXIT_FAILURE;
             }
+            const QString editableTextId = document->addText(0, 0.18, 0.38, QStringLiteral("movable text"), 18);
+            if (editableTextId.isEmpty()
+                || !document->updateTextAnnotation(0, editableTextId, QStringLiteral("movable text"), 0.22, 0.40, 24, 0, 7)
+                || !document->moveTextAnnotation(0, editableTextId, 0.28, 0.44)
+                || !document->resizeTextAnnotation(0, editableTextId, 28)) {
+                AppLogger::write(QStringLiteral("FATAL"), QStringLiteral("INTERACTION_SMOKE_TEXT_EDIT_FAILED"));
+                return EXIT_FAILURE;
+            }
+            const QVariantMap editedText = document->textAnnotation(0, editableTextId);
+            if (editedText.value(QStringLiteral("fontSize")).toInt() != 28
+                || editedText.value(QStringLiteral("strikeLength")).toInt() != 7) {
+                AppLogger::write(QStringLiteral("FATAL"), QStringLiteral("INTERACTION_SMOKE_TEXT_STATE_FAILED"));
+                return EXIT_FAILURE;
+            }
+
+            const QString formText = document->addFormField(0, QStringLiteral("text"), 0.10, 0.62, 0.28, 0.05);
+            const QString formCheck = document->addFormField(0, QStringLiteral("checkbox"), 0.10, 0.70, 0.045, 0.045);
+            const QString formRadio = document->addFormField(0, QStringLiteral("radio"), 0.18, 0.70, 0.045, 0.045);
+            const QString formDrop = document->addFormField(0, QStringLiteral("dropdown"), 0.28, 0.70, 0.28, 0.05);
+            if (formText.isEmpty() || formCheck.isEmpty() || formRadio.isEmpty() || formDrop.isEmpty()
+                || !document->updateFormField(0, formText, QStringLiteral("John Doe"), false, 0)
+                || !document->updateFormField(0, formCheck, QString(), true, 0)
+                || !document->updateFormField(0, formRadio, QString(), true, 0)
+                || !document->updateFormField(0, formDrop, QString(), false, 1)
+                || document->formAnnotations(0).size() < 4) {
+                AppLogger::write(QStringLiteral("FATAL"), QStringLiteral("INTERACTION_SMOKE_FORMS_FAILED"));
+                return EXIT_FAILURE;
+            }
+
+            if (!document->canUndo()) {
+                AppLogger::write(QStringLiteral("FATAL"), QStringLiteral("INTERACTION_SMOKE_UNDO_MISSING"));
+                return EXIT_FAILURE;
+            }
+            document->undo();
+            if (!document->canRedo()) {
+                AppLogger::write(QStringLiteral("FATAL"), QStringLiteral("INTERACTION_SMOKE_REDO_MISSING"));
+                return EXIT_FAILURE;
+            }
+            document->redo();
+
             document->addInkStyled(0, QVariantList{0.15, 0.20, 0.30, 0.24, 0.45, 0.21},
                                    QStringLiteral("#2563EB"), 0.004, 100);
             document->addRedaction(1, 0.12, 0.12, 0.22, 0.08);

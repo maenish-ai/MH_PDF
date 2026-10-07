@@ -7,6 +7,7 @@
 #include <QMutex>
 #include <QSizeF>
 #include <QString>
+#include <QStringList>
 #include <QVector>
 #include <functional>
 
@@ -19,6 +20,22 @@ struct TextOverlayItem {
     double height{0.03};  // normalized selection bounds
     int fontSize{18};
     QString color{QStringLiteral("#111827")};
+    int strikeStart{-1};
+    int strikeLength{0};
+};
+
+struct FormOverlayItem {
+    QString id;
+    QString type{QStringLiteral("text")}; // text, checkbox, radio, dropdown
+    QString label;
+    QString value;
+    QStringList options;
+    double x{0.15};
+    double y{0.20};
+    double width{0.25};
+    double height{0.045};
+    bool checked{false};
+    int selectedIndex{0};
 };
 
 struct PageItem {
@@ -37,6 +54,7 @@ struct PageItem {
     bool pageNumber{false};
     QString batesText;
     QVector<TextOverlayItem> textItems;
+    QVector<FormOverlayItem> formItems;
 
     bool sourceBacked() const { return !sourceId.isEmpty() && sourcePage >= 0 && base.isNull(); }
 };

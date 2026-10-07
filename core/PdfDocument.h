@@ -66,7 +66,16 @@ public:
     Q_INVOKABLE void addImage(int page, const QString &path, double x = .15, double y = .15, double w = .5, double h = .5);
     Q_INVOKABLE QString addText(int page, double x, double y, const QString &text, int fontSize = 18);
     Q_INVOKABLE QVariantList textAnnotations(int page) const;
+    Q_INVOKABLE QVariantMap textAnnotation(int page, const QString &id) const;
+    Q_INVOKABLE bool updateTextAnnotation(int page, const QString &id, const QString &text, double x, double y, int fontSize, int strikeStart = -1, int strikeLength = 0);
+    Q_INVOKABLE bool moveTextAnnotation(int page, const QString &id, double x, double y);
+    Q_INVOKABLE bool resizeTextAnnotation(int page, const QString &id, int fontSize);
     Q_INVOKABLE bool deleteTextAnnotation(int page, const QString &id);
+    Q_INVOKABLE QString addFormField(int page, const QString &type, double x, double y, double w = 0.25, double h = 0.045);
+    Q_INVOKABLE QVariantList formAnnotations(int page) const;
+    Q_INVOKABLE QVariantMap formAnnotation(int page, const QString &id) const;
+    Q_INVOKABLE bool updateFormField(int page, const QString &id, const QString &value, bool checked, int selectedIndex = 0);
+    Q_INVOKABLE bool deleteFormField(int page, const QString &id);
     Q_INVOKABLE void addHighlight(int page, double x, double y, double w, double h);
     Q_INVOKABLE void addHighlightRects(int page, const QVariantList &rects, const QString &color = QStringLiteral("#FFD740"), int opacity = 42);
     Q_INVOKABLE void addRedaction(int page, double x, double y, double w, double h);

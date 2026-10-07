@@ -23,7 +23,8 @@ dialog_refs = set(re.findall(r'\b([A-Za-z_]\w*Dlg)\.(?:open|close|accept|reject)
 checks['dialog references resolve'] = not (dialog_refs - ids)
 checks['watermark menu is wired'] = 'waterDlg.open()' in qml and 'watermarkDlg.open()' not in qml
 checks['provider-dependent document actions explain missing providers'] = qml.count('requireProvider("qpdf")') >= 6 and 'requireProvider("tesseract")' in qml
-checks['planned forms stay honestly disabled'] = 'text: tx("action.form_fill"); enabled: false' in qml
+caps=(root/'core/EngineCapabilities.cpp').read_text(encoding='utf-8')
+checks['local forms are wired while native AcroForm authoring stays honest'] = 'chooseTool("formFill")' in qml and 'addFormField' in (root/'core/PdfDocument.h').read_text(encoding='utf-8') and 'capabilities[QStringLiteral("acroFormAuthoring")] = false' in caps
 for name, ok in checks.items():
     print(('PASS' if ok else 'FAIL'), name)
 if dialog_refs - ids:

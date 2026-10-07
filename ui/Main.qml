@@ -17,12 +17,21 @@ ApplicationWindow {
 
     property var pdfDocument: documentManager.currentDocument
     property real zoom: 0.74
+    // Visual zoom updates immediately; renderZoom is committed after a short
+    // idle interval so rapid Ctrl+/Ctrl-/wheel input cannot queue dozens of
+    // expensive PDF renders and freeze the UI.
+    property real renderZoom: 0.74
     property string tool: "select"
+    property bool pdfFocusMode: false
     property string selectedText: ""
     property var selectedTextRects: []
     property int selectedTextPage: -1
     property int selectedAnnotationPage: -1
     property string selectedAnnotationId: ""
+    property var selectedAnnotationData: ({})
+    property int selectedFormPage: -1
+    property string selectedFormId: ""
+    property var selectedFormData: ({})
     property int pendingActionPage: -1
     property string pendingActionTool: ""
     property var pendingActionRect: ({"x": 0, "y": 0, "w": 0, "h": 0})
@@ -56,6 +65,7 @@ ApplicationWindow {
     readonly property color accentCyan: "#0891b2"
     readonly property color accentEmerald: "#059669"
     readonly property color accentAmber: "#d97706"
+    readonly property color accentRose: "#db2777"
     readonly property color pointerColor: "#2864dc"
     readonly property color textToolColor: "#7c3aed"
     readonly property color highlightToolColor: "#d97706"
@@ -105,7 +115,7 @@ ApplicationWindow {
         if (!pdfDocument || !documentView)
             return
         var w = pdfDocument.pages.pageWidth(pdfDocument.currentPage)
-        zoom = Math.max(0.12, Math.min(3.0, (documentView.width - 90) / Math.max(1, w)))
+        setZoom(Math.max(0.12, Math.min(3.0, (documentView.width - 90) / Math.max(1, w))))
     }
 
     function fitPage() {
@@ -113,11 +123,15 @@ ApplicationWindow {
             return
         var w = pdfDocument.pages.pageWidth(pdfDocument.currentPage)
         var h = pdfDocument.pages.pageHeight(pdfDocument.currentPage)
-        zoom = Math.max(0.12, Math.min(3.0, Math.min((documentView.width - 90) / Math.max(1, w), (documentView.height - 70) / Math.max(1, h))))
+        setZoom(Math.max(0.12, Math.min(3.0, Math.min((documentView.width - 90) / Math.max(1, w), (documentView.height - 70) / Math.max(1, h)))))
     }
 
-    function zoomIn() { zoom = Math.min(4.0, Math.round((zoom + 0.1) * 100) / 100) }
-    function zoomOut() { zoom = Math.max(0.12, Math.round((zoom - 0.1) * 100) / 100) }
+    function setZoom(value) {
+        zoom = Math.max(0.12, Math.min(4.0, value))
+        zoomRenderTimer.restart()
+    }
+    function zoomIn() { setZoom(Math.round((zoom + 0.1) * 100) / 100) }
+    function zoomOut() { setZoom(Math.round((zoom - 0.1) * 100) / 100) }
 
     function navigateToPage(index, positionMode) {
         if (!pdfDocument || !documentView || pdfDocument.pageCount <= 0)
@@ -142,11 +156,20 @@ ApplicationWindow {
     function clearOverlaySelection() {
         selectedAnnotationPage = -1
         selectedAnnotationId = ""
+        selectedAnnotationData = ({})
+        selectedFormPage = -1
+        selectedFormId = ""
+        selectedFormData = ({})
     }
 
     function deleteCurrentSelection() {
         if (selectedAnnotationPage >= 0 && selectedAnnotationId !== "") {
             pdfDocument.deleteTextAnnotation(selectedAnnotationPage, selectedAnnotationId)
+            clearOverlaySelection()
+            return
+        }
+        if (selectedFormPage >= 0 && selectedFormId !== "") {
+            pdfDocument.deleteFormField(selectedFormPage, selectedFormId)
             clearOverlaySelection()
             return
         }
@@ -225,6 +248,8 @@ ApplicationWindow {
         if (tool === "draw") return tx("tool.draw_hint")
         if (tool === "redact") return tx("tool.redact_hint")
         if (tool === "crop") return tx("tool.crop_hint")
+        if (tool === "formFill") return tx("tool.form_fill_hint")
+        if (tool === "formText" || tool === "formCheckbox" || tool === "formRadio" || tool === "formDropdown") return tx("tool.form_add_hint")
         return selectedText !== "" ? tx("tool.selection_ready") : tx("tool.pointer_hint")
     }
 
@@ -244,6 +269,13 @@ ApplicationWindow {
             pendingCloseTab = -1
             documentManager.closeTab(index)
         }
+    }
+
+    Timer {
+        id: zoomRenderTimer
+        interval: appSettings.performanceProfile === "eco" ? 260 : 160
+        repeat: false
+        onTriggered: renderZoom = zoom
     }
 
     onClosing: function(close) {
@@ -271,6 +303,7 @@ ApplicationWindow {
             clearOverlaySelection()
             cancelPendingAction()
             zoom = 0.74
+            renderZoom = 0.74
             if (pdfDocument && pdfDocument.recoveryAvailable)
                 recoveryDlg.open()
         }
@@ -639,6 +672,101 @@ ApplicationWindow {
                 tool = "select"
             }
             textInput.clear()
+        }
+    }
+
+    Dialog {
+        id: editTextDlg
+        title: tx("dialog.edit_inserted_text")
+        modal: true
+        standardButtons: Dialog.NoButton
+        property int page: -1
+        property string annotationId: ""
+        property real nx: 0
+        property real ny: 0
+        property int strikeStart: -1
+        property int strikeLength: 0
+        onOpened: {
+            var d = pdfDocument.textAnnotation(page, annotationId)
+            if (!d || !d.id) { reject(); return }
+            nx = d.x
+            ny = d.y
+            strikeStart = d.strikeStart
+            strikeLength = d.strikeLength
+            editTextInput.text = d.text
+            editTextSize.value = d.fontSize
+            editTextInput.forceActiveFocus()
+        }
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 9
+            Label { text: tx("dialog.edit_text_help"); color: mutedColor; wrapMode: Text.WordWrap; Layout.preferredWidth: 460 }
+            TextArea {
+                id: editTextInput
+                Layout.preferredWidth: 460
+                Layout.preferredHeight: 110
+                wrapMode: TextEdit.Wrap
+                selectByMouse: true
+            }
+            RowLayout {
+                Label { text: tx("dialog.size") }
+                SpinBox { id: editTextSize; from: 8; to: 144; value: 18 }
+                Item { Layout.fillWidth: true }
+                Button {
+                    text: tx("action.strike_selected_text")
+                    onClicked: {
+                        var a = Math.min(editTextInput.selectionStart, editTextInput.selectionEnd)
+                        var b = Math.max(editTextInput.selectionStart, editTextInput.selectionEnd)
+                        editTextDlg.strikeStart = b > a ? a : -1
+                        editTextDlg.strikeLength = b > a ? b - a : 0
+                    }
+                }
+                Button { text: tx("action.clear_strike"); onClicked: { editTextDlg.strikeStart = -1; editTextDlg.strikeLength = 0 } }
+            }
+        }
+        footer: DialogButtonBox {
+            Button { text: tx("dialog.cancel"); onClicked: editTextDlg.reject() }
+            Button { text: tx("dialog.apply"); highlighted: true; enabled: editTextInput.text.length > 0; onClicked: editTextDlg.accept() }
+        }
+        onAccepted: {
+            pdfDocument.updateTextAnnotation(page, annotationId, editTextInput.text, nx, ny,
+                                             editTextSize.value, strikeStart, strikeLength)
+            selectedAnnotationData = pdfDocument.textAnnotation(page, annotationId)
+        }
+    }
+
+    Dialog {
+        id: formValueDlg
+        title: tx("dialog.form_value")
+        modal: true
+        standardButtons: Dialog.NoButton
+        property int page: -1
+        property string formId: ""
+        property var data: ({})
+        onOpened: {
+            data = pdfDocument.formAnnotation(page, formId)
+            formTextValue.text = data.value || ""
+            if (data.options && data.options.length > 0) {
+                formDropdown.model = data.options
+                formDropdown.currentIndex = Math.max(0, data.selectedIndex || 0)
+            }
+        }
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 10
+            Label { text: tx("dialog.form_local_note"); color: mutedColor; wrapMode: Text.WordWrap; Layout.preferredWidth: 420 }
+            TextField { id: formTextValue; visible: formValueDlg.data.type === "text"; Layout.preferredWidth: 420; placeholderText: tx("action.form_text_field") }
+            ComboBox { id: formDropdown; visible: formValueDlg.data.type === "dropdown"; Layout.preferredWidth: 420 }
+        }
+        footer: DialogButtonBox {
+            Button { text: tx("dialog.cancel"); onClicked: formValueDlg.reject() }
+            Button { text: tx("dialog.apply"); highlighted: true; onClicked: formValueDlg.accept() }
+        }
+        onAccepted: {
+            var v = data.type === "dropdown" ? formDropdown.currentText : formTextValue.text
+            pdfDocument.updateFormField(page, formId, v, data.checked || false,
+                                        data.type === "dropdown" ? formDropdown.currentIndex : (data.selectedIndex || 0))
+            selectedFormData = pdfDocument.formAnnotation(page, formId)
         }
     }
 
@@ -1154,9 +1282,9 @@ ApplicationWindow {
     Shortcut { sequences: ["Ctrl+=", "Ctrl++"]; onActivated: zoomIn() }
     Shortcut { sequence: "Ctrl+-"; onActivated: zoomOut() }
     Shortcut { sequence: "Ctrl+0"; onActivated: fitPage() }
-    Shortcut { sequence: "Ctrl+1"; onActivated: zoom = 1.0 }
+    Shortcut { sequence: "Ctrl+1"; onActivated: setZoom(1.0) }
     Shortcut { sequence: "Ctrl+2"; onActivated: fitWidth() }
-    Shortcut { sequence: "Ctrl+L"; onActivated: win.visibility = win.visibility === Window.FullScreen ? Window.Windowed : Window.FullScreen }
+    Shortcut { sequence: "Ctrl+L"; onActivated: pdfFocusMode = !pdfFocusMode }
     Shortcut { sequence: "Ctrl+K"; onActivated: preferencesDlg.open() }
     Shortcut { sequence: "Ctrl+Shift+P"; onActivated: commandDlg.open() }
     Shortcut { sequence: "Ctrl+Shift+N"; onActivated: goToPageDlg.open() }
@@ -1176,7 +1304,7 @@ ApplicationWindow {
     Shortcut { sequence: "Left"; enabled: !keyboardTextInputActive(); onActivated: navigateToPage(pdfDocument.currentPage - 1) }
     Shortcut { sequence: "Home"; enabled: !keyboardTextInputActive(); onActivated: navigateToPage(0) }
     Shortcut { sequence: "End"; enabled: !keyboardTextInputActive(); onActivated: navigateToPage(pdfDocument.pageCount - 1) }
-    Shortcut { sequence: "Escape"; enabled: !keyboardTextInputActive(); onActivated: { cancelPendingAction(); clearTextSelection(); clearOverlaySelection(); chooseTool("select") } }
+    Shortcut { sequence: "Escape"; enabled: !keyboardTextInputActive(); onActivated: { if (pdfFocusMode) { pdfFocusMode = false } else { cancelPendingAction(); clearTextSelection(); clearOverlaySelection(); chooseTool("select") } } }
 
     Shortcut { sequence: "V"; enabled: canUseSingleKeyShortcut(); onActivated: chooseTool("select") }
     Shortcut { sequence: "H"; enabled: canUseSingleKeyShortcut(); onActivated: chooseTool("hand") }
@@ -1199,6 +1327,7 @@ ApplicationWindow {
     }
 
     menuBar: MenuBar {
+        visible: !pdfFocusMode
         Menu {
             title: tx("menu.file")
             Action { text: tx("action.home"); onTriggered: homeVisible = true }
@@ -1232,7 +1361,7 @@ ApplicationWindow {
             MenuSeparator {}
             Action { text: tx("action.copy_page"); onTriggered: pdfDocument.copyPage(pdfDocument.currentPage) }
             Action { text: tx("action.paste_page"); enabled: pdfDocument.hasPageClipboard; onTriggered: pdfDocument.pastePage(pdfDocument.currentPage) }
-            Action { text: tx("action.delete_selected_object"); enabled: selectedAnnotationId !== "" || selectedText !== ""; onTriggered: deleteCurrentSelection() }
+            Action { text: tx("action.delete_selected_object"); enabled: selectedAnnotationId !== "" || selectedFormId !== "" || selectedText !== ""; onTriggered: deleteCurrentSelection() }
             Action { text: tx("action.delete_page"); enabled: !pdfDocument.locked && pdfDocument.pageCount > 1; onTriggered: pdfDocument.deletePage(pdfDocument.currentPage) }
             MenuSeparator {}
             Action { text: tx("action.find"); onTriggered: searchDlg.open() }
@@ -1241,15 +1370,15 @@ ApplicationWindow {
 
         Menu {
             title: tx("menu.view")
-            Action { text: tx("action.zoom_in"); onTriggered: zoom = Math.min(3, zoom + 0.1) }
-            Action { text: tx("action.zoom_out"); onTriggered: zoom = Math.max(0.12, zoom - 0.1) }
-            Action { text: tx("action.actual_size"); onTriggered: zoom = 1.0 }
+            Action { text: tx("action.zoom_in"); onTriggered: zoomIn() }
+            Action { text: tx("action.zoom_out"); onTriggered: zoomOut() }
+            Action { text: tx("action.actual_size"); onTriggered: setZoom(1.0) }
             Action { text: tx("action.fit_width"); onTriggered: fitWidth() }
             Action { text: tx("action.fit_page"); onTriggered: fitPage() }
             Action { text: tx("action.go_to_page"); onTriggered: goToPageDlg.open() }
             MenuSeparator {}
             Action { text: tx("action.sidebar"); checkable: true; checked: showSidebar; onTriggered: showSidebar = checked }
-            Action { text: tx("action.full_screen"); checkable: true; checked: win.visibility === Window.FullScreen; onTriggered: win.visibility = checked ? Window.FullScreen : Window.Windowed }
+            Action { text: tx("action.full_screen"); checkable: true; checked: pdfFocusMode; onTriggered: pdfFocusMode = checked }
             MenuSeparator {}
             Action { text: tx("action.dark_mode"); checkable: true; checked: appSettings.darkMode; onTriggered: appSettings.darkMode = checked }
             Action { text: tx("action.adaptive_performance"); checkable: true; checked: appSettings.adaptivePerformance; onTriggered: appSettings.adaptivePerformance = checked }
@@ -1305,13 +1434,12 @@ ApplicationWindow {
 
         Menu {
             title: tx("menu.forms")
-            Action { text: tx("action.form_fill"); enabled: false }
-            Action { text: tx("action.form_text_field"); enabled: false }
-            Action { text: tx("action.form_checkbox"); enabled: false }
-            Action { text: tx("action.form_radio"); enabled: false }
-            Action { text: tx("action.form_dropdown"); enabled: false }
+            Action { text: tx("action.form_fill"); enabled: !pdfDocument.locked; onTriggered: chooseTool("formFill") }
             MenuSeparator {}
-            Action { text: tx("action.feature_planned"); enabled: false }
+            Action { text: tx("action.form_text_field"); enabled: !pdfDocument.locked; onTriggered: chooseTool("formText") }
+            Action { text: tx("action.form_checkbox"); enabled: !pdfDocument.locked; onTriggered: chooseTool("formCheckbox") }
+            Action { text: tx("action.form_radio"); enabled: !pdfDocument.locked; onTriggered: chooseTool("formRadio") }
+            Action { text: tx("action.form_dropdown"); enabled: !pdfDocument.locked; onTriggered: chooseTool("formDropdown") }
         }
 
         Menu {
@@ -1369,7 +1497,8 @@ ApplicationWindow {
     }
 
     header: Rectangle {
-        height: 154
+        visible: !pdfFocusMode
+        height: visible ? 154 : 0
         color: panelColor
         gradient: Gradient {
             orientation: Gradient.Horizontal
@@ -1474,8 +1603,22 @@ ApplicationWindow {
                     anchors.leftMargin: 14
                     anchors.rightMargin: 14
                     spacing: 5
-                    ToolButton { text: "↶"; enabled: pdfDocument.canUndo; onClicked: pdfDocument.undo() }
-                    ToolButton { text: "↷"; enabled: pdfDocument.canRedo; onClicked: pdfDocument.redo() }
+                    Button {
+                        text: "↶  " + tx("action.undo")
+                        enabled: pdfDocument.canUndo
+                        font.bold: true
+                        palette.buttonText: enabled ? "white" : mutedColor
+                        background: Rectangle { radius: 9; color: parent.enabled ? accentViolet : (appSettings.darkMode ? "#253047" : "#e8ebf1"); border.color: parent.enabled ? "#9b6cf0" : borderColor }
+                        onClicked: pdfDocument.undo()
+                    }
+                    Button {
+                        text: "↷  " + tx("action.redo")
+                        enabled: pdfDocument.canRedo
+                        font.bold: true
+                        palette.buttonText: enabled ? "white" : mutedColor
+                        background: Rectangle { radius: 9; color: parent.enabled ? accentCyan : (appSettings.darkMode ? "#253047" : "#e8ebf1"); border.color: parent.enabled ? "#22b8d6" : borderColor }
+                        onClicked: pdfDocument.redo()
+                    }
                     Rectangle { width: 1; height: 30; color: borderColor }
 
                     Button {
@@ -1531,7 +1674,28 @@ ApplicationWindow {
                     }
                     Button { visible: selectedText !== ""; text: tx("action.copy_text"); onClicked: pdfDocument.copyTextToClipboard(selectedText) }
                     Button { visible: selectedText !== "" && selectedTextPage >= 0; text: tx("action.highlight_selection"); onClicked: { pdfDocument.addHighlightRects(selectedTextPage, selectedTextRects, highlightColor.toString(), highlightOpacity); clearTextSelection() } }
-                    Button { visible: selectedAnnotationId !== ""; text: tx("action.delete_selected_object"); onClicked: deleteCurrentSelection() }
+                    Button {
+                        visible: selectedAnnotationId !== ""
+                        text: tx("action.edit_selected_text")
+                        onClicked: { editTextDlg.page = selectedAnnotationPage; editTextDlg.annotationId = selectedAnnotationId; editTextDlg.open() }
+                    }
+                    Button {
+                        visible: selectedAnnotationId !== ""
+                        text: tx("action.text_smaller")
+                        onClicked: {
+                            var d = pdfDocument.textAnnotation(selectedAnnotationPage, selectedAnnotationId)
+                            if (d && d.id) pdfDocument.resizeTextAnnotation(selectedAnnotationPage, selectedAnnotationId, Math.max(8, d.fontSize - 2))
+                        }
+                    }
+                    Button {
+                        visible: selectedAnnotationId !== ""
+                        text: tx("action.text_larger")
+                        onClicked: {
+                            var d = pdfDocument.textAnnotation(selectedAnnotationPage, selectedAnnotationId)
+                            if (d && d.id) pdfDocument.resizeTextAnnotation(selectedAnnotationPage, selectedAnnotationId, Math.min(144, d.fontSize + 2))
+                        }
+                    }
+                    Button { visible: selectedAnnotationId !== "" || selectedFormId !== ""; text: tx("action.delete_selected_object"); onClicked: deleteCurrentSelection() }
                     Button { visible: pendingActionPage >= 0; text: tx("action.apply"); highlighted: true; onClicked: applyPendingAction() }
                     Button { visible: pendingActionPage >= 0; text: tx("dialog.cancel"); onClicked: cancelPendingAction() }
 
@@ -1555,7 +1719,8 @@ ApplicationWindow {
     }
 
     footer: Rectangle {
-        height: 32
+        visible: !pdfFocusMode
+        height: visible ? 32 : 0
         color: panelColor
         border.color: borderColor
         RowLayout {
@@ -1579,6 +1744,14 @@ ApplicationWindow {
 
         Rectangle {
             color: appSettings.darkMode ? "#111827" : "#f4f6f9"
+            gradient: Gradient {
+                GradientStop { position: 0.0; color: appSettings.darkMode ? "#101827" : "#f7faff" }
+                GradientStop { position: 0.45; color: appSettings.darkMode ? "#151a2d" : "#fbf9ff" }
+                GradientStop { position: 1.0; color: appSettings.darkMode ? "#102529" : "#f3fcfb" }
+            }
+            Rectangle { anchors.right: parent.right; anchors.top: parent.top; anchors.rightMargin: -90; anchors.topMargin: -110; width: 360; height: 360; radius: 180; color: accentViolet; opacity: appSettings.darkMode ? 0.10 : 0.055 }
+            Rectangle { anchors.left: parent.left; anchors.bottom: parent.bottom; anchors.leftMargin: -110; anchors.bottomMargin: -140; width: 420; height: 420; radius: 210; color: accentCyan; opacity: appSettings.darkMode ? 0.09 : 0.05 }
+            Rectangle { anchors.horizontalCenter: parent.horizontalCenter; anchors.top: parent.top; anchors.topMargin: 40; width: 160; height: 160; radius: 80; color: accentRose; opacity: appSettings.darkMode ? 0.035 : 0.025 }
             ScrollView {
                 anchors.fill: parent
                 contentWidth: availableWidth
@@ -1650,10 +1823,14 @@ ApplicationWindow {
             orientation: Qt.Horizontal
 
             Rectangle {
-                visible: showSidebar
-                SplitView.preferredWidth: showSidebar ? 238 : 0
-                SplitView.minimumWidth: showSidebar ? 170 : 0
+                visible: showSidebar && !pdfFocusMode
+                SplitView.preferredWidth: visible ? 238 : 0
+                SplitView.minimumWidth: visible ? 170 : 0
                 color: subPanelColor
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: appSettings.darkMode ? "#172235" : "#f8fbff" }
+                    GradientStop { position: 1.0; color: appSettings.darkMode ? "#18252e" : "#f5fbfa" }
+                }
                 border.color: borderColor
                 ColumnLayout {
                     anchors.fill: parent
@@ -1686,6 +1863,7 @@ ApplicationWindow {
                                 radius: 8
                                 border.color: index === pdfDocument.currentPage ? "#91aff0" : "transparent"
                             }
+                            Rectangle { anchors.horizontalCenter: parent.horizontalCenter; y: 12; width: 104; height: 147; color: "white"; radius: 2; border.color: "#d9dee8" }
                             Image { source: pageImage; anchors.horizontalCenter: parent.horizontalCenter; y: 12; width: 104; height: 147; sourceSize.width: 104; sourceSize.height: 147; fillMode: Image.PreserveAspectFit; cache: false; asynchronous: true }
                             Label { text: i18n.number(index + 1); color: textColor; anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; anchors.bottomMargin: 6 }
                             TapHandler { onTapped: navigateToPage(index) }
@@ -1709,6 +1887,19 @@ ApplicationWindow {
                     GradientStop { position: 1.0; color: appSettings.darkMode ? "#111827" : "#d7deea" }
                 }
 
+                Button {
+                    visible: pdfFocusMode
+                    z: 500
+                    anchors.top: parent.top
+                    anchors.right: parent.right
+                    anchors.margins: 12
+                    text: tx("action.exit_focus_mode") + "  Esc"
+                    font.bold: true
+                    palette.buttonText: "white"
+                    background: Rectangle { radius: 12; color: "#cc172033"; border.color: accentCyan }
+                    onClicked: pdfFocusMode = false
+                }
+
                 ListView {
                     id: documentView
                     anchors.fill: parent
@@ -1717,9 +1908,10 @@ ApplicationWindow {
                     spacing: 18
                     clip: true
                     reuseItems: true
-                    cacheBuffer: appSettings.performanceProfile === "eco" ? Math.round(height * 0.55)
-                                 : appSettings.performanceProfile === "performance" ? Math.round(height * 2.0)
-                                 : Math.round(height * 1.25)
+                    cacheBuffer: zoomRenderTimer.running ? 0
+                                 : appSettings.performanceProfile === "eco" ? Math.round(height * 0.20)
+                                 : appSettings.performanceProfile === "performance" ? Math.round(height * 1.0)
+                                 : Math.round(height * 0.55)
                     model: pdfDocument.pages
                     // currentIndex is intentionally not bound to currentPage. A
                     // binding here makes ListView try to reposition itself when
@@ -1832,12 +2024,12 @@ ApplicationWindow {
                                 fillMode: Image.Stretch
                                 cache: false
                                 asynchronous: true
-                                sourceSize.width: Math.max(64, Math.round(pageSurface.width))
-                                sourceSize.height: Math.max(64, Math.round(pageSurface.height))
-                                source: {
-                                    var modelRev = pdfDocument.pages.modelRevision
-                                    return pageImage
-                                }
+                                sourceSize.width: Math.max(64, Math.round(pageWidth * renderZoom))
+                                sourceSize.height: Math.max(64, Math.round(pageHeight * renderZoom))
+                                // pageImage already contains this page's revision. Do not bind
+                                // every visible page to the global model revision: one Draw/Highlight
+                                // must never trigger a re-render of all neighboring pages.
+                                source: pageImage
                             }
 
                             BusyIndicator {
@@ -1866,23 +2058,124 @@ ApplicationWindow {
                                     return pdfDocument.textAnnotations(index)
                                 }
                                 delegate: Rectangle {
+                                    id: textOverlaySelection
                                     required property var modelData
-                                    z: 28
+                                    z: 32
                                     x: modelData.x * pageSurface.width
                                     y: modelData.y * pageSurface.height
-                                    width: Math.max(18, modelData.w * pageSurface.width)
-                                    height: Math.max(14, modelData.h * pageSurface.height)
-                                    color: selectedAnnotationPage === pageDelegate.index && selectedAnnotationId === modelData.id ? "#223b82f6" : "transparent"
+                                    width: Math.max(22, modelData.w * pageSurface.width)
+                                    height: Math.max(18, modelData.h * pageSurface.height)
+                                    radius: 3
+                                    color: selectedAnnotationPage === pageDelegate.index && selectedAnnotationId === modelData.id ? "#203b82f6" : "transparent"
                                     border.width: selectedAnnotationPage === pageDelegate.index && selectedAnnotationId === modelData.id ? 2 : 0
                                     border.color: accentColor
                                     visible: tool === "select"
-                                    TapHandler {
+
+                                    MouseArea {
+                                        id: moveTextArea
+                                        anchors.fill: parent
                                         enabled: tool === "select"
-                                        onTapped: {
+                                        hoverEnabled: true
+                                        cursorShape: pressed ? Qt.ClosedHandCursor : Qt.SizeAllCursor
+                                        drag.target: textOverlaySelection
+                                        drag.minimumX: 0
+                                        drag.maximumX: Math.max(0, pageSurface.width - textOverlaySelection.width)
+                                        drag.minimumY: 0
+                                        drag.maximumY: Math.max(0, pageSurface.height - textOverlaySelection.height)
+                                        onPressed: {
                                             selectedAnnotationPage = pageDelegate.index
                                             selectedAnnotationId = modelData.id
+                                            selectedAnnotationData = pdfDocument.textAnnotation(pageDelegate.index, modelData.id)
+                                            selectedFormPage = -1
+                                            selectedFormId = ""
                                             clearTextSelection()
                                             pdfDocument.currentPage = pageDelegate.index
+                                        }
+                                        onDoubleClicked: {
+                                            editTextDlg.page = pageDelegate.index
+                                            editTextDlg.annotationId = modelData.id
+                                            editTextDlg.open()
+                                        }
+                                        onReleased: {
+                                            pdfDocument.moveTextAnnotation(pageDelegate.index, modelData.id,
+                                                                           textOverlaySelection.x / Math.max(1, pageSurface.width),
+                                                                           textOverlaySelection.y / Math.max(1, pageSurface.height))
+                                            selectedAnnotationData = pdfDocument.textAnnotation(pageDelegate.index, modelData.id)
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        id: textResizeHandle
+                                        z: 8
+                                        visible: selectedAnnotationPage === pageDelegate.index && selectedAnnotationId === modelData.id
+                                        anchors.right: parent.right
+                                        anchors.bottom: parent.bottom
+                                        width: 12; height: 12; radius: 6
+                                        color: accentViolet
+                                        border.color: "white"
+                                        border.width: 2
+                                        ToolTip.visible: resizeHover.hovered
+                                        ToolTip.text: tx("action.drag_to_resize_text")
+                                        HoverHandler { id: resizeHover }
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.SizeFDiagCursor
+                                            property real startMouseX: 0
+                                            property int startFontSize: 18
+                                            onPressed: function(mouse) {
+                                                startMouseX = mouse.x
+                                                startFontSize = modelData.fontSize
+                                            }
+                                            onReleased: function(mouse) {
+                                                var delta = mouse.x - startMouseX
+                                                var nextSize = Math.max(8, Math.min(144, startFontSize + Math.round(delta / 2)))
+                                                pdfDocument.resizeTextAnnotation(pageDelegate.index, modelData.id, nextSize)
+                                                selectedAnnotationData = pdfDocument.textAnnotation(pageDelegate.index, modelData.id)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Repeater {
+                                model: {
+                                    var revisionDependency = pdfDocument.pages.modelRevision
+                                    return pdfDocument.formAnnotations(index)
+                                }
+                                delegate: Rectangle {
+                                    id: formHitBox
+                                    required property var modelData
+                                    z: 31
+                                    x: modelData.x * pageSurface.width
+                                    y: modelData.y * pageSurface.height
+                                    width: Math.max(16, modelData.w * pageSurface.width)
+                                    height: Math.max(16, modelData.h * pageSurface.height)
+                                    radius: 4
+                                    color: "transparent"
+                                    border.width: (tool === "formFill" || (selectedFormPage === pageDelegate.index && selectedFormId === modelData.id)) ? 2 : 0
+                                    border.color: selectedFormPage === pageDelegate.index && selectedFormId === modelData.id ? accentViolet : accentCyan
+                                    visible: tool === "select" || tool === "formFill" || tool === "formText" || tool === "formCheckbox" || tool === "formRadio" || tool === "formDropdown"
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            selectedFormPage = pageDelegate.index
+                                            selectedFormId = modelData.id
+                                            selectedFormData = pdfDocument.formAnnotation(pageDelegate.index, modelData.id)
+                                            selectedAnnotationPage = -1
+                                            selectedAnnotationId = ""
+                                            clearTextSelection()
+                                            if (tool === "formFill") {
+                                                if (modelData.type === "checkbox" || modelData.type === "radio") {
+                                                    var nextChecked = modelData.type === "radio" ? true : !modelData.checked
+                                                    pdfDocument.updateFormField(pageDelegate.index, modelData.id, modelData.value || "", nextChecked, modelData.selectedIndex || 0)
+                                                    selectedFormData = pdfDocument.formAnnotation(pageDelegate.index, modelData.id)
+                                                } else {
+                                                    formValueDlg.page = pageDelegate.index
+                                                    formValueDlg.formId = modelData.id
+                                                    formValueDlg.open()
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -1990,8 +2283,8 @@ ApplicationWindow {
                                 preventStealing: true
                                 cursorShape: tool === "hand" ? (pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor)
                                            : tool === "text" ? Qt.IBeamCursor
-                                           : tool === "draw" || tool === "redact" || tool === "crop" || tool === "highlight" ? Qt.CrossCursor
-                                           : Qt.IBeamCursor
+                                           : tool === "draw" || tool === "redact" || tool === "crop" || tool === "highlight" || tool === "formText" || tool === "formCheckbox" || tool === "formRadio" || tool === "formDropdown" ? Qt.CrossCursor
+                                           : tool === "formFill" ? Qt.PointingHandCursor : Qt.IBeamCursor
 
                                 onPressed: function(mouse) {
                                     // Mark the page active without asking ListView to reposition.
@@ -2001,6 +2294,21 @@ ApplicationWindow {
                                     pageDelegate.pressY = mouse.y
                                     if (tool === "select")
                                         clearOverlaySelection()
+                                    if (tool === "formText" || tool === "formCheckbox" || tool === "formRadio" || tool === "formDropdown") {
+                                        var formType = tool === "formText" ? "text" : tool === "formCheckbox" ? "checkbox" : tool === "formRadio" ? "radio" : "dropdown"
+                                        var fw = (formType === "checkbox" || formType === "radio") ? 0.045 : 0.28
+                                        var fh = (formType === "checkbox" || formType === "radio") ? 0.045 : 0.05
+                                        var createdFormId = pdfDocument.addFormField(index, formType,
+                                                                                    mouse.x / Math.max(1, width),
+                                                                                    mouse.y / Math.max(1, height), fw, fh)
+                                        if (createdFormId !== "") {
+                                            selectedFormPage = index
+                                            selectedFormId = createdFormId
+                                            selectedFormData = pdfDocument.formAnnotation(index, createdFormId)
+                                            tool = "formFill"
+                                        }
+                                        return
+                                    }
                                     if (tool === "hand") {
                                         pageDelegate.handStartContentX = documentView.contentX
                                         pageDelegate.handStartContentY = documentView.contentY
@@ -2109,9 +2417,14 @@ ApplicationWindow {
             }
 
             Rectangle {
-                SplitView.preferredWidth: 285
-                SplitView.minimumWidth: 225
+                visible: !pdfFocusMode
+                SplitView.preferredWidth: visible ? 285 : 0
+                SplitView.minimumWidth: visible ? 225 : 0
                 color: panelColor
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: appSettings.darkMode ? "#20263a" : "#fffaff" }
+                    GradientStop { position: 1.0; color: appSettings.darkMode ? "#172b2c" : "#f7fffc" }
+                }
                 border.color: borderColor
                 ColumnLayout {
                     anchors.fill: parent
