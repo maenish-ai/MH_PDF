@@ -1,5 +1,6 @@
-# MaenPDF 7.4.0 — Zero-Freeze UX & Editing
+# MaenPDF 7.4.1 — Zero-Freeze UX & Editing
 
+- **Compile stabilization:** corrected the Qt `QVariant::toInt(bool*)` misuse in inserted-text move/resize and added a CI/static regression guard.
 - Debounced visual zoom: rapid zoom updates scale instantly while expensive PDF re-rendering is committed only after input settles.
 - Editing a page no longer invalidates image rendering for every visible neighboring page.
 - Smaller virtualized page prefetch windows on low-memory and balanced systems.

@@ -1327,8 +1327,8 @@ bool PdfDocument::moveTextAnnotation(int pageIndex, const QString &id, double x,
     if (item.isEmpty()) return false;
     return updateTextAnnotation(pageIndex, id, item.value(QStringLiteral("text")).toString(), x, y,
                                 item.value(QStringLiteral("fontSize")).toInt(),
-                                item.value(QStringLiteral("strikeStart")).toInt(-1),
-                                item.value(QStringLiteral("strikeLength")).toInt(0));
+                                item.value(QStringLiteral("strikeStart"), -1).toInt(),
+                                item.value(QStringLiteral("strikeLength"), 0).toInt());
 }
 
 bool PdfDocument::resizeTextAnnotation(int pageIndex, const QString &id, int fontSize) {
@@ -1336,8 +1336,8 @@ bool PdfDocument::resizeTextAnnotation(int pageIndex, const QString &id, int fon
     if (item.isEmpty()) return false;
     return updateTextAnnotation(pageIndex, id, item.value(QStringLiteral("text")).toString(),
                                 item.value(QStringLiteral("x")).toDouble(), item.value(QStringLiteral("y")).toDouble(),
-                                fontSize, item.value(QStringLiteral("strikeStart")).toInt(-1),
-                                item.value(QStringLiteral("strikeLength")).toInt(0));
+                                fontSize, item.value(QStringLiteral("strikeStart"), -1).toInt(),
+                                item.value(QStringLiteral("strikeLength"), 0).toInt());
 }
 
 QString PdfDocument::addFormField(int pageIndex, const QString &type, double x, double y, double w, double h) {

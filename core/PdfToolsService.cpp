@@ -508,7 +508,7 @@ bool PdfToolsService::beginAsync(const QString &operation, std::function<void()>
     m_currentOperation = operation;
     emit busyChanged();
     QPointer<PdfToolsService> guard(this);
-    QtConcurrent::run([guard, task = std::move(task)]() mutable {
+    [[maybe_unused]] auto backgroundFuture = QtConcurrent::run([guard, task = std::move(task)]() mutable {
         if (!guard)
             return;
         task();

@@ -1,8 +1,9 @@
-# MaenPDF 7.4.0
+# MaenPDF 7.4.1
 
 MaenPDF is a free, local-first, bilingual PDF workspace written in C++17 with Qt/QML. Its product goals are **fast, private, free and open**. Documents are processed on the user's device; the core application does not require a cloud account, subscription, telemetry service or mandatory network connection.
 
-## 7.4.0 Zero-Freeze UX & Editing Release
+## 7.4.1 Zero-Freeze UX & Editing Release
+- Fixes the Qt 6.11 cross-platform compile regression in inserted-text move/resize and adds a compiler API regression audit to CI.
 - Full English/Arabic catalogs with persistent language choice and automatic LTR/RTL layout.
 - Inserted text is a structured MaenPDF overlay: selectable, draggable, resizable, editable, deletable, partially strikeable and fully Undo/Redo aware.
 - Fixed automatic viewport/sidebar jumping by decoupling current-page tracking from ListView currentIndex and limiting explicit repositioning to navigation actions.

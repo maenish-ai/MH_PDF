@@ -1,4 +1,4 @@
-# MaenPDF 7.4.0 Keyboard Shortcuts
+# MaenPDF 7.4.1 Keyboard Shortcuts
 
 MaenPDF uses an **Acrobat-familiar** shortcut profile so people coming from Adobe Acrobat do not need to relearn common PDF navigation and tool commands. Standard Windows shortcuts are preserved where possible. Single-key tool shortcuts can be turned off in **Preferences**.
 

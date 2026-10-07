@@ -4,6 +4,7 @@ import subprocess, sys
 root=Path(__file__).resolve().parents[1]
 tests=[
     'source_audit.py',
+    'compiler_guard_audit.py',
     'localization_audit.py',
     'release_audit.py',
     'engine_v7_audit.py',

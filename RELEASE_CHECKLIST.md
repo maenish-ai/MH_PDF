@@ -1,4 +1,4 @@
-# MaenPDF 7.4.0 — Release Checklist
+# MaenPDF 7.4.1 — Release Checklist
 
 ## Interaction and UX
 - [x] Inserted text can be selected and deleted without rasterizing the page.
@@ -28,7 +28,7 @@
 - [x] No document cloud upload path exists in the core.
 
 ## Windows
-- [x] Version `7.4.0`.
+- [x] Version `7.4.1`.
 - [x] Clean application-directory replacement on update retained.
 - [x] Native Print / Print Current Page / Print Preview retained.
 - [x] VC143 runtime remains bundled side-by-side.
@@ -37,8 +37,8 @@
 
 ## Android
 - [x] Package ID remains `org.orbispdf.app` for update continuity.
-- [x] versionName `7.4.0`.
-- [x] versionCode `70400`.
+- [x] versionName `7.4.1`.
+- [x] versionCode `70401`.
 - [x] Target API 36 / minimum API 28.
 - [x] Signed installable CI APK preserved before AAB build.
 
