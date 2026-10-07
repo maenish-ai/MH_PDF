@@ -218,11 +218,26 @@ bool PdfToolsService::linearizePdf(const QString &inputPath, const QString &outp
 }
 
 bool PdfToolsService::repairPdf(const QString &inputPath, const QString &outputPath) {
-    if (m_qpdf.isEmpty()) { fail(QStringLiteral("tools.error.qpdf_missing")); return false; }
     const QString input = normalizePath(inputPath);
     const QString output = ensurePdfSuffix(normalizePath(outputPath));
     if (input.isEmpty() || output.isEmpty() || !ensureParent(output)) { fail(QStringLiteral("tools.error.path")); return false; }
-    const bool ok = runProcess(m_qpdf, {input, output}, 180000);
+
+    bool ok = false;
+    if (!m_qpdf.isEmpty()) {
+        ok = runProcess(m_qpdf, {input, output}, 180000);
+    } else {
+        // Built-in appearance-preserving recovery fallback. It deliberately
+        // flattens the readable pages into a fresh PDF instead of pretending to
+        // perform qpdf's structural repair. This keeps Repair useful offline on
+        // installations without optional providers.
+        QPdfDocument document;
+        QString errorKey;
+        if (!loadPdf(document, input, QString(), &errorKey)) {
+            fail(errorKey);
+            return false;
+        }
+        ok = writeFlattened(document, output, 144);
+    }
     if (ok) done(QStringLiteral("tools.done.repair")); else fail(QStringLiteral("tools.error.process"));
     return ok;
 }
@@ -238,13 +253,26 @@ bool PdfToolsService::decryptPdf(const QString &inputPath, const QString &output
 }
 
 QString PdfToolsService::checkPdf(const QString &inputPath) {
-    if (m_qpdf.isEmpty()) { fail(QStringLiteral("tools.error.qpdf_missing")); return {}; }
     const QString input = normalizePath(inputPath);
     if (input.isEmpty()) { fail(QStringLiteral("tools.error.path")); return {}; }
-    QByteArray out, err;
-    const bool ok = runProcess(m_qpdf, {QStringLiteral("--check"), input}, 120000, &out, &err);
-    const QString report = QString::fromUtf8(out + err).trimmed();
-    if (ok) done(QStringLiteral("tools.done.check")); else fail(QStringLiteral("tools.error.check_failed"));
+
+    if (!m_qpdf.isEmpty()) {
+        QByteArray out, err;
+        const bool ok = runProcess(m_qpdf, {QStringLiteral("--check"), input}, 120000, &out, &err);
+        const QString report = QString::fromUtf8(out + err).trimmed();
+        if (ok) done(QStringLiteral("tools.done.check")); else fail(QStringLiteral("tools.error.check_failed"));
+        return report;
+    }
+
+    QPdfDocument document;
+    QString errorKey;
+    if (!loadPdf(document, input, QString(), &errorKey)) {
+        fail(errorKey);
+        return {};
+    }
+    // Keep the fallback report intentionally compact and language-neutral.
+    const QString report = QStringLiteral("PDF OK\npages=%1\nengine=Qt PDF\nmode=local").arg(document.pageCount());
+    done(QStringLiteral("tools.done.check"));
     return report;
 }
 

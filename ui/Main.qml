@@ -21,6 +21,8 @@ ApplicationWindow {
     property string selectedText: ""
     property var selectedTextRects: []
     property int selectedTextPage: -1
+    property int selectedAnnotationPage: -1
+    property string selectedAnnotationId: ""
     property int pendingActionPage: -1
     property string pendingActionTool: ""
     property var pendingActionRect: ({"x": 0, "y": 0, "w": 0, "h": 0})
@@ -50,6 +52,10 @@ ApplicationWindow {
     readonly property color mutedColor: appSettings.darkMode ? "#aeb8c8" : "#667085"
     readonly property color borderColor: appSettings.darkMode ? "#334155" : "#dce1e8"
     readonly property color accentColor: "#2864dc"
+    readonly property color accentViolet: "#7c3aed"
+    readonly property color accentCyan: "#0891b2"
+    readonly property color accentEmerald: "#059669"
+    readonly property color accentAmber: "#d97706"
     readonly property color pointerColor: "#2864dc"
     readonly property color textToolColor: "#7c3aed"
     readonly property color highlightToolColor: "#d97706"
@@ -110,6 +116,70 @@ ApplicationWindow {
         zoom = Math.max(0.12, Math.min(3.0, Math.min((documentView.width - 90) / Math.max(1, w), (documentView.height - 70) / Math.max(1, h))))
     }
 
+    function zoomIn() { zoom = Math.min(4.0, Math.round((zoom + 0.1) * 100) / 100) }
+    function zoomOut() { zoom = Math.max(0.12, Math.round((zoom - 0.1) * 100) / 100) }
+
+    function navigateToPage(index, positionMode) {
+        if (!pdfDocument || !documentView || pdfDocument.pageCount <= 0)
+            return
+        var target = Math.max(0, Math.min(pdfDocument.pageCount - 1, index))
+        pdfDocument.currentPage = target
+        Qt.callLater(function() {
+            if (documentView)
+                documentView.positionViewAtIndex(target, positionMode === undefined ? ListView.Beginning : positionMode)
+        })
+        homeVisible = false
+    }
+
+    function scrollByScreen(direction) {
+        if (!documentView)
+            return
+        var amount = Math.max(120, documentView.height * 0.88)
+        var maxY = Math.max(0, documentView.contentHeight - documentView.height)
+        documentView.contentY = Math.max(0, Math.min(maxY, documentView.contentY + direction * amount))
+    }
+
+    function clearOverlaySelection() {
+        selectedAnnotationPage = -1
+        selectedAnnotationId = ""
+    }
+
+    function deleteCurrentSelection() {
+        if (selectedAnnotationPage >= 0 && selectedAnnotationId !== "") {
+            pdfDocument.deleteTextAnnotation(selectedAnnotationPage, selectedAnnotationId)
+            clearOverlaySelection()
+            return
+        }
+        if (selectedText !== "") {
+            clearTextSelection()
+            return
+        }
+    }
+
+    function keyboardTextInputActive() {
+        var item = win.activeFocusItem
+        return item && typeof item.cursorPosition !== "undefined"
+    }
+
+    function canUseSingleKeyShortcut() {
+        return appSettings.singleKeyShortcuts && !keyboardTextInputActive()
+    }
+
+    function performanceProfileLabel() {
+        if (appSettings.performanceProfile === "eco")
+            return tx("performance.eco")
+        if (appSettings.performanceProfile === "performance")
+            return tx("performance.performance")
+        return tx("performance.balanced")
+    }
+
+    function requireProvider(name) {
+        if (providersState && providersState[name])
+            return true
+        providersDlg.open()
+        return false
+    }
+
     function clearTextSelection() {
         selectedText = ""
         selectedTextRects = []
@@ -125,8 +195,10 @@ ApplicationWindow {
     function chooseTool(name) {
         if (tool !== name) {
             cancelPendingAction()
-            if (name !== "select")
+            if (name !== "select") {
                 clearTextSelection()
+                clearOverlaySelection()
+            }
         }
         tool = name
         homeVisible = false
@@ -147,6 +219,7 @@ ApplicationWindow {
     function toolHint() {
         if (pendingActionPage >= 0)
             return pendingActionTool === "crop" ? tx("tool.crop_ready") : tx("tool.redact_ready")
+        if (tool === "hand") return tx("tool.hand_hint")
         if (tool === "text") return tx("tool.text_hint")
         if (tool === "highlight") return tx("tool.highlight_hint")
         if (tool === "draw") return tx("tool.draw_hint")
@@ -195,6 +268,7 @@ ApplicationWindow {
         function onCurrentDocumentChanged() {
             tool = "select"
             clearTextSelection()
+            clearOverlaySelection()
             cancelPendingAction()
             zoom = 0.74
             if (pdfDocument && pdfDocument.recoveryAvailable)
@@ -214,14 +288,6 @@ ApplicationWindow {
     }
 
     Connections {
-        target: pdfDocument
-        function onCurrentPageChanged() {
-            if (!syncingPageFromScroll && documentView && !homeVisible)
-                documentView.positionViewAtIndex(pdfDocument.currentPage, ListView.Contain)
-        }
-    }
-
-    Connections {
         target: pdfTools
         function onOperationFinished(key, args) { showToast(key, args) }
         function onOperationFailed(key, args) { showToast(key, args) }
@@ -234,6 +300,12 @@ ApplicationWindow {
         target: printService
         function onOperationFinished(key, args) { showToast(key, args) }
         function onOperationFailed(key, args) { showToast(key, args) }
+    }
+
+    Connections {
+        target: appSettings
+        function onLowMemoryModeChanged() { if (pdfDocument) pdfDocument.refreshMemoryPolicy() }
+        function onAdaptivePerformanceChanged() { if (pdfDocument) pdfDocument.refreshMemoryPolicy() }
     }
 
     Rectangle {
@@ -557,7 +629,15 @@ ApplicationWindow {
             Button { text: tx("dialog.ok"); highlighted: true; onClicked: textDlg.accept() }
         }
         onAccepted: {
-            pdfDocument.addText(pdfDocument.currentPage, nx, ny, textInput.text, fontSize.value)
+            var createdId = pdfDocument.addText(pdfDocument.currentPage, nx, ny, textInput.text, fontSize.value)
+            if (createdId !== "") {
+                selectedAnnotationPage = pdfDocument.currentPage
+                selectedAnnotationId = createdId
+                clearTextSelection()
+                // Return to Pointer mode so the new text is visibly selected and
+                // can be removed immediately with Delete/Backspace or the toolbar button.
+                tool = "select"
+            }
             textInput.clear()
         }
     }
@@ -868,9 +948,32 @@ ApplicationWindow {
                 onToggled: appSettings.darkMode = checked
             }
             CheckBox {
+                text: tx("action.adaptive_performance")
+                checked: appSettings.adaptivePerformance
+                onToggled: appSettings.adaptivePerformance = checked
+            }
+            Label {
+                text: tx("preferences.performance_profile", [performanceProfileLabel(), i18n.number(appSettings.totalMemoryMB)])
+                color: appSettings.performanceProfile === "eco" ? accentEmerald : appSettings.performanceProfile === "performance" ? accentViolet : accentColor
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+            CheckBox {
                 text: tx("action.low_memory")
                 checked: appSettings.lowMemoryMode
+                enabled: !appSettings.adaptivePerformance
                 onToggled: appSettings.lowMemoryMode = checked
+            }
+            CheckBox {
+                text: tx("action.single_key_shortcuts")
+                checked: appSettings.singleKeyShortcuts
+                onToggled: appSettings.singleKeyShortcuts = checked
+            }
+            Label {
+                text: tx("preferences.shortcuts_note")
+                color: mutedColor
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
             }
             CheckBox {
                 text: tx("action.safe_graphics")
@@ -931,6 +1034,77 @@ ApplicationWindow {
     }
 
     Dialog {
+        id: goToPageDlg
+        title: tx("dialog.go_to_page")
+        modal: true
+        standardButtons: Dialog.NoButton
+        width: 380
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 10
+            Label { text: tx("dialog.page_number"); color: textColor }
+            SpinBox {
+                id: goToPageSpin
+                from: 1
+                to: Math.max(1, pdfDocument.pageCount)
+                value: Math.max(1, pdfDocument.currentPage + 1)
+                editable: true
+                Layout.fillWidth: true
+            }
+        }
+        onOpened: goToPageSpin.value = Math.max(1, pdfDocument.currentPage + 1)
+        footer: DialogButtonBox {
+            Button { text: tx("dialog.cancel"); onClicked: goToPageDlg.reject() }
+            Button { text: tx("dialog.go"); highlighted: true; onClicked: { navigateToPage(goToPageSpin.value - 1); goToPageDlg.accept() } }
+        }
+    }
+
+    Dialog {
+        id: shortcutsDlg
+        title: tx("dialog.shortcuts_title")
+        modal: true
+        standardButtons: Dialog.NoButton
+        width: 700
+        height: Math.min(760, win.height - 80)
+        ScrollView {
+            anchors.fill: parent
+            contentWidth: availableWidth
+            ColumnLayout {
+                width: parent.width
+                spacing: 7
+                Label { text: tx("shortcuts.note"); color: mutedColor; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+                Repeater {
+                    model: [
+                        ["Ctrl+O", tx("action.open")], ["Ctrl+S", tx("action.save")], ["Ctrl+P", tx("action.print")], ["Ctrl+F", tx("action.find")],
+                        ["Ctrl+=", tx("action.zoom_in")], ["Ctrl+-", tx("action.zoom_out")], ["Ctrl+0", tx("action.fit_page")], ["Ctrl+1", tx("action.actual_size")], ["Ctrl+2", tx("action.fit_width")],
+                        ["Ctrl+L", tx("action.full_screen")], ["Ctrl+K", tx("action.preferences")], ["Ctrl+Shift+P", tx("action.command_palette")], ["Ctrl+Shift+N", tx("action.go_to_page")],
+                        ["Ctrl+Shift+D", tx("action.delete_page")], ["Ctrl+Shift+T", tx("action.add_blank")], ["Ctrl+Shift+I", tx("action.combine")], ["Ctrl+W", tx("action.close_tab")], ["Ctrl+Tab / Ctrl+Shift+Tab", tx("action.next_previous_tab")], ["F4", tx("action.sidebar")],
+                        ["V", tx("action.pointer")], ["H", tx("action.hand")], ["T", tx("action.edit_text")], ["U", tx("action.highlight")], ["D", tx("action.draw")], ["C", tx("action.crop")], ["Shift+Y", tx("action.redact")],
+                        ["Page Up / Page Down", tx("action.scroll_screen")], ["Ctrl+Page Up / Ctrl+Page Down", tx("action.previous_next_page")], ["Home / End", tx("action.first_last_page")],
+                        ["Delete / Backspace", tx("action.delete_selected_object")]
+                    ]
+                    delegate: Rectangle {
+                        required property var modelData
+                        required property int index
+                        Layout.fillWidth: true
+                        height: 34
+                        radius: 7
+                        color: index % 2 === 0 ? subPanelColor : "transparent"
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 10
+                            anchors.rightMargin: 10
+                            Label { text: modelData[0]; font.bold: true; color: accentColor; Layout.preferredWidth: 210 }
+                            Label { text: modelData[1]; color: textColor; Layout.fillWidth: true }
+                        }
+                    }
+                }
+            }
+        }
+        footer: DialogButtonBox { Button { text: tx("dialog.close"); onClicked: shortcutsDlg.close() } }
+    }
+
+    Dialog {
         id: commandDlg
         title: tx("dialog.command_title")
         modal: true
@@ -953,8 +1127,8 @@ ApplicationWindow {
             Button { text: tx("action.print"); Layout.fillWidth: true; enabled: printService.available; visible: commandSearch.text === "" || text.toLowerCase().indexOf(commandSearch.text.toLowerCase()) >= 0; onClicked: { commandDlg.close(); printService.printDocument(pdfDocument, false) } }
             Button { text: tx("action.find"); Layout.fillWidth: true; visible: commandSearch.text === "" || text.toLowerCase().indexOf(commandSearch.text.toLowerCase()) >= 0; onClicked: { commandDlg.close(); searchDlg.open() } }
             Button { text: tx("action.compare"); Layout.fillWidth: true; enabled: pdfDocument.filePath !== ""; visible: commandSearch.text === "" || text.toLowerCase().indexOf(commandSearch.text.toLowerCase()) >= 0; onClicked: { commandDlg.close(); compareDlg.open() } }
-            Button { text: tx("action.ocr"); Layout.fillWidth: true; enabled: providersState.qpdf && providersState.tesseract && pdfDocument.filePath !== ""; visible: commandSearch.text === "" || text.toLowerCase().indexOf(commandSearch.text.toLowerCase()) >= 0; onClicked: { commandDlg.close(); ocrDlg.open() } }
-            Button { text: tx("action.optimize"); Layout.fillWidth: true; enabled: providersState.qpdf && pdfDocument.filePath !== ""; visible: commandSearch.text === "" || text.toLowerCase().indexOf(commandSearch.text.toLowerCase()) >= 0; onClicked: { commandDlg.close(); toolOutputDlg.operation = "optimize"; toolOutputDlg.open() } }
+            Button { text: tx("action.ocr"); Layout.fillWidth: true; enabled: pdfDocument.filePath !== ""; visible: commandSearch.text === "" || text.toLowerCase().indexOf(commandSearch.text.toLowerCase()) >= 0; onClicked: { commandDlg.close(); if (requireProvider("qpdf") && requireProvider("tesseract")) ocrDlg.open() } }
+            Button { text: tx("action.optimize"); Layout.fillWidth: true; enabled: pdfDocument.filePath !== ""; visible: commandSearch.text === "" || text.toLowerCase().indexOf(commandSearch.text.toLowerCase()) >= 0; onClicked: { commandDlg.close(); if (requireProvider("qpdf")) { toolOutputDlg.operation = "optimize"; toolOutputDlg.open() } } }
             Button { text: tx("action.safe_flatten"); Layout.fillWidth: true; enabled: pdfDocument.filePath !== ""; visible: commandSearch.text === "" || text.toLowerCase().indexOf(commandSearch.text.toLowerCase()) >= 0; onClicked: { commandDlg.close(); toolOutputDlg.operation = "safeFlatten"; toolOutputDlg.open() } }
             Button { text: tx("action.preferences"); Layout.fillWidth: true; visible: commandSearch.text === "" || text.toLowerCase().indexOf(commandSearch.text.toLowerCase()) >= 0; onClicked: { commandDlg.close(); preferencesDlg.open() } }
             Button { text: tx("action.privacy"); Layout.fillWidth: true; visible: commandSearch.text === "" || text.toLowerCase().indexOf(commandSearch.text.toLowerCase()) >= 0; onClicked: { commandDlg.close(); privacyDlg.open() } }
@@ -962,6 +1136,8 @@ ApplicationWindow {
         footer: DialogButtonBox { Button { text: tx("dialog.close"); onClicked: commandDlg.close() } }
     }
 
+    // Acrobat-familiar document shortcuts plus a few cross-application
+    // conventions. Single-key tool accelerators can be disabled in Preferences.
     Shortcut { sequences: [StandardKey.New]; onActivated: { documentManager.newTab(); homeVisible = false } }
     Shortcut { sequences: [StandardKey.Open]; onActivated: openDlg.open() }
     Shortcut { sequences: [StandardKey.Save]; onActivated: pdfDocument.filePath === "" ? saveDlg.open() : pdfDocument.save() }
@@ -969,12 +1145,46 @@ ApplicationWindow {
     Shortcut { sequences: [StandardKey.Print]; enabled: printService.available; onActivated: printService.printDocument(pdfDocument, false) }
     Shortcut { sequences: [StandardKey.Undo]; onActivated: if (pdfDocument.canUndo) pdfDocument.undo() }
     Shortcut { sequences: [StandardKey.Redo]; onActivated: if (pdfDocument.canRedo) pdfDocument.redo() }
-    Shortcut { sequences: [StandardKey.Copy]; onActivated: selectedText !== "" ? pdfDocument.copyTextToClipboard(selectedText) : pdfDocument.copyPage(pdfDocument.currentPage) }
-    Shortcut { sequences: [StandardKey.Delete]; onActivated: pdfDocument.deletePage(pdfDocument.currentPage) }
-    Shortcut { sequence: "PageDown"; onActivated: if (pdfDocument.currentPage < pdfDocument.pageCount - 1) pdfDocument.currentPage += 1 }
-    Shortcut { sequence: "PageUp"; onActivated: if (pdfDocument.currentPage > 0) pdfDocument.currentPage -= 1 }
-    Shortcut { sequence: "Escape"; onActivated: { cancelPendingAction(); clearTextSelection(); chooseTool("select") } }
-    Shortcut { sequence: "Ctrl+K"; onActivated: commandDlg.open() }
+    Shortcut { sequences: [StandardKey.Copy]; enabled: !keyboardTextInputActive(); onActivated: selectedText !== "" ? pdfDocument.copyTextToClipboard(selectedText) : pdfDocument.copyPage(pdfDocument.currentPage) }
+    // Never steal Backspace/Delete from a TextField. These remove only the
+    // selected MaenPDF overlay object while the document canvas has focus.
+    Shortcut { sequence: "Delete"; enabled: !keyboardTextInputActive(); onActivated: deleteCurrentSelection() }
+    Shortcut { sequence: "Backspace"; enabled: !keyboardTextInputActive(); onActivated: deleteCurrentSelection() }
+
+    Shortcut { sequences: ["Ctrl+=", "Ctrl++"]; onActivated: zoomIn() }
+    Shortcut { sequence: "Ctrl+-"; onActivated: zoomOut() }
+    Shortcut { sequence: "Ctrl+0"; onActivated: fitPage() }
+    Shortcut { sequence: "Ctrl+1"; onActivated: zoom = 1.0 }
+    Shortcut { sequence: "Ctrl+2"; onActivated: fitWidth() }
+    Shortcut { sequence: "Ctrl+L"; onActivated: win.visibility = win.visibility === Window.FullScreen ? Window.Windowed : Window.FullScreen }
+    Shortcut { sequence: "Ctrl+K"; onActivated: preferencesDlg.open() }
+    Shortcut { sequence: "Ctrl+Shift+P"; onActivated: commandDlg.open() }
+    Shortcut { sequence: "Ctrl+Shift+N"; onActivated: goToPageDlg.open() }
+    Shortcut { sequence: "Ctrl+Shift+D"; enabled: !pdfDocument.locked && pdfDocument.pageCount > 1; onActivated: pdfDocument.deletePage(pdfDocument.currentPage) }
+    Shortcut { sequence: "Ctrl+Shift+T"; onActivated: pdfDocument.addBlankPage() }
+    Shortcut { sequence: "Ctrl+Shift+I"; enabled: !pdfDocument.locked; onActivated: appendDlg.open() }
+    Shortcut { sequence: "Ctrl+W"; onActivated: requestCloseTab(documentManager.currentIndex) }
+    Shortcut { sequence: "Ctrl+Tab"; enabled: documentManager.count > 1 && !keyboardTextInputActive(); onActivated: documentManager.currentIndex = (documentManager.currentIndex + 1) % documentManager.count }
+    Shortcut { sequence: "Ctrl+Shift+Tab"; enabled: documentManager.count > 1 && !keyboardTextInputActive(); onActivated: documentManager.currentIndex = (documentManager.currentIndex - 1 + documentManager.count) % documentManager.count }
+    Shortcut { sequence: "F4"; onActivated: showSidebar = !showSidebar }
+
+    Shortcut { sequence: "PageDown"; enabled: !keyboardTextInputActive(); onActivated: scrollByScreen(1) }
+    Shortcut { sequence: "PageUp"; enabled: !keyboardTextInputActive(); onActivated: scrollByScreen(-1) }
+    Shortcut { sequence: "Ctrl+PageDown"; onActivated: navigateToPage(pdfDocument.currentPage + 1) }
+    Shortcut { sequence: "Ctrl+PageUp"; onActivated: navigateToPage(pdfDocument.currentPage - 1) }
+    Shortcut { sequence: "Right"; enabled: !keyboardTextInputActive(); onActivated: navigateToPage(pdfDocument.currentPage + 1) }
+    Shortcut { sequence: "Left"; enabled: !keyboardTextInputActive(); onActivated: navigateToPage(pdfDocument.currentPage - 1) }
+    Shortcut { sequence: "Home"; enabled: !keyboardTextInputActive(); onActivated: navigateToPage(0) }
+    Shortcut { sequence: "End"; enabled: !keyboardTextInputActive(); onActivated: navigateToPage(pdfDocument.pageCount - 1) }
+    Shortcut { sequence: "Escape"; enabled: !keyboardTextInputActive(); onActivated: { cancelPendingAction(); clearTextSelection(); clearOverlaySelection(); chooseTool("select") } }
+
+    Shortcut { sequence: "V"; enabled: canUseSingleKeyShortcut(); onActivated: chooseTool("select") }
+    Shortcut { sequence: "H"; enabled: canUseSingleKeyShortcut(); onActivated: chooseTool("hand") }
+    Shortcut { sequence: "T"; enabled: canUseSingleKeyShortcut() && !pdfDocument.locked; onActivated: chooseTool("text") }
+    Shortcut { sequence: "U"; enabled: canUseSingleKeyShortcut() && !pdfDocument.locked; onActivated: chooseTool("highlight") }
+    Shortcut { sequence: "D"; enabled: canUseSingleKeyShortcut() && !pdfDocument.locked; onActivated: chooseTool("draw") }
+    Shortcut { sequence: "C"; enabled: canUseSingleKeyShortcut() && !pdfDocument.locked; onActivated: chooseTool("crop") }
+    Shortcut { sequence: "Shift+Y"; enabled: canUseSingleKeyShortcut() && !pdfDocument.locked; onActivated: chooseTool("redact") }
 
     Popup {
         id: toast
@@ -1022,7 +1232,8 @@ ApplicationWindow {
             MenuSeparator {}
             Action { text: tx("action.copy_page"); onTriggered: pdfDocument.copyPage(pdfDocument.currentPage) }
             Action { text: tx("action.paste_page"); enabled: pdfDocument.hasPageClipboard; onTriggered: pdfDocument.pastePage(pdfDocument.currentPage) }
-            Action { text: tx("action.delete"); enabled: pdfDocument.pageCount > 1; onTriggered: pdfDocument.deletePage(pdfDocument.currentPage) }
+            Action { text: tx("action.delete_selected_object"); enabled: selectedAnnotationId !== "" || selectedText !== ""; onTriggered: deleteCurrentSelection() }
+            Action { text: tx("action.delete_page"); enabled: !pdfDocument.locked && pdfDocument.pageCount > 1; onTriggered: pdfDocument.deletePage(pdfDocument.currentPage) }
             MenuSeparator {}
             Action { text: tx("action.find"); onTriggered: searchDlg.open() }
             Action { text: tx("action.preferences"); onTriggered: preferencesDlg.open() }
@@ -1035,26 +1246,28 @@ ApplicationWindow {
             Action { text: tx("action.actual_size"); onTriggered: zoom = 1.0 }
             Action { text: tx("action.fit_width"); onTriggered: fitWidth() }
             Action { text: tx("action.fit_page"); onTriggered: fitPage() }
+            Action { text: tx("action.go_to_page"); onTriggered: goToPageDlg.open() }
             MenuSeparator {}
             Action { text: tx("action.sidebar"); checkable: true; checked: showSidebar; onTriggered: showSidebar = checked }
             Action { text: tx("action.full_screen"); checkable: true; checked: win.visibility === Window.FullScreen; onTriggered: win.visibility = checked ? Window.FullScreen : Window.Windowed }
             MenuSeparator {}
             Action { text: tx("action.dark_mode"); checkable: true; checked: appSettings.darkMode; onTriggered: appSettings.darkMode = checked }
-            Action { text: tx("action.low_memory"); checkable: true; checked: appSettings.lowMemoryMode; onTriggered: appSettings.lowMemoryMode = checked }
+            Action { text: tx("action.adaptive_performance"); checkable: true; checked: appSettings.adaptivePerformance; onTriggered: appSettings.adaptivePerformance = checked }
+            Action { text: tx("action.low_memory"); checkable: true; checked: appSettings.lowMemoryMode; enabled: !appSettings.adaptivePerformance; onTriggered: appSettings.lowMemoryMode = checked }
         }
 
         Menu {
             title: tx("menu.document")
             Action { text: tx("action.combine"); enabled: !pdfDocument.locked; onTriggered: appendDlg.open() }
             Action { text: tx("action.compare"); enabled: pdfDocument.filePath !== ""; onTriggered: compareDlg.open() }
-            Action { text: tx("action.ocr"); enabled: providersState.qpdf && providersState.tesseract && pdfDocument.filePath !== ""; onTriggered: ocrDlg.open() }
+            Action { text: tx("action.ocr"); enabled: pdfDocument.filePath !== ""; onTriggered: { if (requireProvider("qpdf") && requireProvider("tesseract")) ocrDlg.open() } }
             MenuSeparator {}
-            Action { text: tx("action.optimize"); enabled: providersState.qpdf && pdfDocument.filePath !== ""; onTriggered: { toolOutputDlg.operation = "optimize"; toolOutputDlg.open() } }
-            Action { text: tx("action.linearize"); enabled: providersState.qpdf && pdfDocument.filePath !== ""; onTriggered: { toolOutputDlg.operation = "linearize"; toolOutputDlg.open() } }
-            Action { text: tx("action.repair"); enabled: providersState.qpdf && pdfDocument.filePath !== ""; onTriggered: { toolOutputDlg.operation = "repair"; toolOutputDlg.open() } }
+            Action { text: tx("action.optimize"); enabled: pdfDocument.filePath !== ""; onTriggered: { if (requireProvider("qpdf")) { toolOutputDlg.operation = "optimize"; toolOutputDlg.open() } } }
+            Action { text: tx("action.linearize"); enabled: pdfDocument.filePath !== ""; onTriggered: { if (requireProvider("qpdf")) { toolOutputDlg.operation = "linearize"; toolOutputDlg.open() } } }
+            Action { text: tx("action.repair"); enabled: pdfDocument.filePath !== ""; onTriggered: { toolOutputDlg.operation = "repair"; toolOutputDlg.open() } }
             Action {
                 text: tx("action.check")
-                enabled: providersState.qpdf && pdfDocument.filePath !== ""
+                enabled: pdfDocument.filePath !== ""
                 onTriggered: pdfTools.startCheckPdf(pdfDocument.filePath)
             }
             Action { text: tx("action.properties"); onTriggered: propertiesDlg.open() }
@@ -1069,23 +1282,24 @@ ApplicationWindow {
             Action { text: tx("action.rotate_clockwise"); enabled: !pdfDocument.locked; onTriggered: pdfDocument.rotatePage(pdfDocument.currentPage, 90) }
             Action { text: tx("action.crop"); enabled: !pdfDocument.locked; onTriggered: chooseTool("crop") }
             Action { text: tx("action.extract"); onTriggered: extractDlg.open() }
-            Action { text: tx("action.split"); enabled: providersState.qpdf && pdfDocument.filePath !== ""; onTriggered: splitDlg.open() }
+            Action { text: tx("action.split"); enabled: pdfDocument.filePath !== ""; onTriggered: { if (requireProvider("qpdf")) splitDlg.open() } }
             MenuSeparator {}
             Action { text: tx("action.add_page_numbers"); enabled: !pdfDocument.locked; onTriggered: pdfDocument.addPageNumbers() }
             Action { text: tx("action.bates"); enabled: !pdfDocument.locked; onTriggered: batesDlg.open() }
-            Action { text: tx("action.delete"); enabled: !pdfDocument.locked && pdfDocument.pageCount > 1; onTriggered: pdfDocument.deletePage(pdfDocument.currentPage) }
+            Action { text: tx("action.delete_page"); enabled: !pdfDocument.locked && pdfDocument.pageCount > 1; onTriggered: pdfDocument.deletePage(pdfDocument.currentPage) }
         }
 
         Menu {
             title: tx("menu.comment")
             Action { text: tx("action.pointer"); onTriggered: chooseTool("select") }
+            Action { text: tx("action.hand"); onTriggered: chooseTool("hand") }
             Action { text: tx("action.edit_text"); enabled: !pdfDocument.locked; onTriggered: chooseTool("text") }
             Action { text: tx("action.highlight"); enabled: !pdfDocument.locked; onTriggered: chooseTool("highlight") }
             Action { text: tx("action.draw"); enabled: !pdfDocument.locked; onTriggered: chooseTool("draw") }
             Action { text: tx("action.insert_image"); enabled: !pdfDocument.locked; onTriggered: imageDlg.open() }
             Action { text: tx("action.signature"); enabled: !pdfDocument.locked; onTriggered: signatureDlg.open() }
             MenuSeparator {}
-            Action { text: tx("action.watermark"); enabled: !pdfDocument.locked; onTriggered: watermarkDlg.open() }
+            Action { text: tx("action.watermark"); enabled: !pdfDocument.locked; onTriggered: waterDlg.open() }
             Action { text: tx("action.add_page_numbers"); enabled: !pdfDocument.locked; onTriggered: pdfDocument.addPageNumbers() }
         }
 
@@ -1102,8 +1316,8 @@ ApplicationWindow {
 
         Menu {
             title: tx("menu.protect")
-            Action { text: tx("action.password_permissions"); enabled: providersState.qpdf; onTriggered: securityDlg.open() }
-            Action { text: tx("action.decrypt"); enabled: providersState.qpdf && pdfDocument.filePath !== ""; onTriggered: decryptDlg.open() }
+            Action { text: tx("action.password_permissions"); onTriggered: { if (requireProvider("qpdf")) securityDlg.open() } }
+            Action { text: tx("action.decrypt"); enabled: pdfDocument.filePath !== ""; onTriggered: { if (requireProvider("qpdf")) decryptDlg.open() } }
             Action { text: tx("action.redact"); enabled: !pdfDocument.locked; onTriggered: chooseTool("redact") }
             Action { text: tx("action.safe_flatten"); enabled: pdfDocument.filePath !== ""; onTriggered: { toolOutputDlg.operation = "safeFlatten"; toolOutputDlg.open() } }
             Action { text: tx("action.lock_session"); onTriggered: pdfDocument.setLocked(!pdfDocument.locked) }
@@ -1115,8 +1329,8 @@ ApplicationWindow {
             title: tx("menu.convert")
             Action { text: tx("action.export_images"); enabled: pdfDocument.filePath !== ""; onTriggered: exportImagesDlg.open() }
             Action { text: tx("action.image_to_pdf"); onTriggered: imageToPdfInputDlg.open() }
-            Action { text: tx("action.office_to_pdf"); enabled: providersState.libreOffice; onTriggered: officeInputDlg.open() }
-            Action { text: tx("action.ocr"); enabled: providersState.qpdf && providersState.tesseract && pdfDocument.filePath !== ""; onTriggered: ocrDlg.open() }
+            Action { text: tx("action.office_to_pdf"); onTriggered: { if (requireProvider("libreOffice")) officeInputDlg.open() } }
+            Action { text: tx("action.ocr"); enabled: pdfDocument.filePath !== ""; onTriggered: { if (requireProvider("qpdf") && requireProvider("tesseract")) ocrDlg.open() } }
         }
 
         Menu {
@@ -1124,8 +1338,8 @@ ApplicationWindow {
             Action { text: tx("action.command_palette"); onTriggered: commandDlg.open() }
             Action { text: tx("action.providers"); onTriggered: providersDlg.open() }
             Action { text: tx("action.compare"); enabled: pdfDocument.filePath !== ""; onTriggered: compareDlg.open() }
-            Action { text: tx("action.check"); enabled: providersState.qpdf && pdfDocument.filePath !== ""; onTriggered: pdfTools.startCheckPdf(pdfDocument.filePath) }
-            Action { text: tx("action.batch_optimize"); enabled: providersState.qpdf && !pdfTools.busy; onTriggered: batchOptimizeFilesDlg.open() }
+            Action { text: tx("action.check"); enabled: pdfDocument.filePath !== ""; onTriggered: pdfTools.startCheckPdf(pdfDocument.filePath) }
+            Action { text: tx("action.batch_optimize"); enabled: !pdfTools.busy; onTriggered: { if (requireProvider("qpdf")) batchOptimizeFilesDlg.open() } }
         }
 
         Menu {
@@ -1145,6 +1359,7 @@ ApplicationWindow {
         Menu {
             title: tx("menu.help")
             Action { text: tx("action.command_palette"); onTriggered: commandDlg.open() }
+            Action { text: tx("action.keyboard_shortcuts"); onTriggered: shortcutsDlg.open() }
             Action { text: tx("action.check_updates"); onTriggered: appSettings.openReleasesPage() }
             Action { text: tx("action.project_page"); onTriggered: appSettings.openProjectPage() }
             Action { text: tx("action.privacy"); onTriggered: privacyDlg.open() }
@@ -1156,7 +1371,28 @@ ApplicationWindow {
     header: Rectangle {
         height: 154
         color: panelColor
+        gradient: Gradient {
+            orientation: Gradient.Horizontal
+            GradientStop { position: 0.0; color: appSettings.darkMode ? "#18243a" : "#f0f6ff" }
+            GradientStop { position: 0.5; color: appSettings.darkMode ? "#211f3a" : "#f8f5ff" }
+            GradientStop { position: 1.0; color: appSettings.darkMode ? "#12333a" : "#eefcff" }
+        }
         border.color: borderColor
+        Rectangle {
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: 4
+            gradient: Gradient {
+                orientation: Gradient.Horizontal
+                GradientStop { position: 0.0; color: accentColor }
+                GradientStop { position: 0.25; color: accentViolet }
+                GradientStop { position: 0.50; color: accentCyan }
+                GradientStop { position: 0.75; color: accentEmerald }
+                GradientStop { position: 1.0; color: accentAmber }
+            }
+            z: 5
+        }
         ColumnLayout {
             anchors.fill: parent
             spacing: 0
@@ -1186,13 +1422,13 @@ ApplicationWindow {
                 ToolButton { text: tx("dialog.find"); onClicked: searchDlg.open() }
                 Item { Layout.fillWidth: true }
                 Label { text: displayDocumentTitle(); color: mutedColor; elide: Text.ElideMiddle; Layout.maximumWidth: 330 }
-                Button { text: tx("action.protect"); enabled: providersState.qpdf; onClicked: securityDlg.open() }
+                Button { text: tx("action.protect"); onClicked: { if (requireProvider("qpdf")) securityDlg.open() } }
             }
 
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 42
-                color: subPanelColor
+                color: appSettings.darkMode ? "#172338" : "#f5f8ff"
                 border.color: borderColor
                 ListView {
                     id: tabsView
@@ -1231,7 +1467,8 @@ ApplicationWindow {
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 54
-                color: subPanelColor
+                color: appSettings.darkMode ? "#132b31" : "#f2fbfc"
+                border.color: borderColor
                 RowLayout {
                     anchors.fill: parent
                     anchors.leftMargin: 14
@@ -1246,6 +1483,12 @@ ApplicationWindow {
                         text: tx("action.pointer"); checkable: true; checked: tool === "select"; onClicked: chooseTool("select")
                         palette.buttonText: checked ? "white" : textColor
                         background: Rectangle { radius: 8; color: pointerToolButton.checked ? pointerColor : (pointerToolButton.hovered ? (appSettings.darkMode ? "#24364f" : "#e8f0ff") : "transparent"); border.color: pointerToolButton.checked ? pointerColor : borderColor }
+                    }
+                    Button {
+                        id: handToolButton
+                        text: tx("action.hand"); checkable: true; checked: tool === "hand"; onClicked: chooseTool("hand")
+                        palette.buttonText: checked ? "white" : textColor
+                        background: Rectangle { radius: 8; color: handToolButton.checked ? accentCyan : (handToolButton.hovered ? (appSettings.darkMode ? "#153d47" : "#e4f8fb") : "transparent"); border.color: handToolButton.checked ? accentCyan : borderColor }
                     }
                     Button {
                         id: textToolButton
@@ -1281,13 +1524,14 @@ ApplicationWindow {
                     Rectangle { width: 1; height: 30; color: borderColor }
                     Label {
                         text: toolHint()
-                        color: tool === "redact" ? redactToolColor : tool === "crop" ? cropToolColor : tool === "draw" ? drawToolColor : tool === "highlight" ? highlightToolColor : tool === "text" ? textToolColor : pointerColor
+                        color: tool === "redact" ? redactToolColor : tool === "crop" ? cropToolColor : tool === "draw" ? drawToolColor : tool === "highlight" ? highlightToolColor : tool === "text" ? textToolColor : tool === "hand" ? accentCyan : pointerColor
                         font.pixelSize: 11
                         Layout.maximumWidth: 215
                         elide: Text.ElideRight
                     }
                     Button { visible: selectedText !== ""; text: tx("action.copy_text"); onClicked: pdfDocument.copyTextToClipboard(selectedText) }
                     Button { visible: selectedText !== "" && selectedTextPage >= 0; text: tx("action.highlight_selection"); onClicked: { pdfDocument.addHighlightRects(selectedTextPage, selectedTextRects, highlightColor.toString(), highlightOpacity); clearTextSelection() } }
+                    Button { visible: selectedAnnotationId !== ""; text: tx("action.delete_selected_object"); onClicked: deleteCurrentSelection() }
                     Button { visible: pendingActionPage >= 0; text: tx("action.apply"); highlighted: true; onClicked: applyPendingAction() }
                     Button { visible: pendingActionPage >= 0; text: tx("dialog.cancel"); onClicked: cancelPendingAction() }
 
@@ -1302,9 +1546,9 @@ ApplicationWindow {
                     }
                     Item { Layout.fillWidth: true }
                     ToolButton { text: tx("action.fit_width"); onClicked: fitWidth() }
-                    ToolButton { text: "−"; onClicked: zoom = Math.max(0.12, zoom - 0.1) }
+                    ToolButton { text: "−"; onClicked: zoomOut() }
                     Label { text: i18n.number(Math.round(zoom * 100)) + "%"; Layout.preferredWidth: 54; horizontalAlignment: Text.AlignHCenter; color: textColor }
-                    ToolButton { text: "+"; onClicked: zoom = Math.min(3, zoom + 0.1) }
+                    ToolButton { text: "+"; onClicked: zoomIn() }
                 }
             }
         }
@@ -1320,7 +1564,10 @@ ApplicationWindow {
             anchors.rightMargin: 12
             Label { text: i18n.number(pdfDocument.currentPage + 1) + " / " + i18n.number(pdfDocument.pageCount); color: textColor }
             Label { text: pdfDocument.locked ? tx("status.editing_locked") : tx("status.ready"); color: pdfDocument.locked ? "#f59e0b" : mutedColor }
-            Label { text: appSettings.lowMemoryMode ? tx("status.low_memory") : ""; color: mutedColor }
+            Label {
+                text: tx("status.performance_profile", [performanceProfileLabel()])
+                color: appSettings.performanceProfile === "eco" ? accentEmerald : appSettings.performanceProfile === "performance" ? accentViolet : accentColor
+            }
             Item { Layout.fillWidth: true }
             Label { text: pdfDocument.modified ? tx("status.unsaved") : tx("status.saved"); color: mutedColor }
         }
@@ -1424,7 +1671,9 @@ ApplicationWindow {
                         Layout.fillHeight: true
                         model: pdfDocument.pages
                         clip: true
-                        currentIndex: pdfDocument.currentPage
+                        // Do not bind ListView.currentIndex to the document page:
+                        // Qt may auto-scroll the thumbnail strip whenever the visible
+                        // page changes. Highlighting is done in the delegate instead.
                         delegate: Item {
                             required property int index
                             required property string pageImage
@@ -1439,7 +1688,7 @@ ApplicationWindow {
                             }
                             Image { source: pageImage; anchors.horizontalCenter: parent.horizontalCenter; y: 12; width: 104; height: 147; sourceSize.width: 104; sourceSize.height: 147; fillMode: Image.PreserveAspectFit; cache: false; asynchronous: true }
                             Label { text: i18n.number(index + 1); color: textColor; anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; anchors.bottomMargin: 6 }
-                            TapHandler { onTapped: pdfDocument.currentPage = index }
+                            TapHandler { onTapped: navigateToPage(index) }
                         }
                     }
                     RowLayout {
@@ -1447,7 +1696,7 @@ ApplicationWindow {
                         Layout.margins: 7
                         Button { text: tx("action.copy"); onClicked: pdfDocument.copyPage(pdfDocument.currentPage) }
                         Button { text: tx("action.paste"); enabled: pdfDocument.hasPageClipboard; onClicked: pdfDocument.pastePage(pdfDocument.currentPage) }
-                        Button { text: tx("action.delete"); enabled: pdfDocument.pageCount > 1; onClicked: pdfDocument.deletePage(pdfDocument.currentPage) }
+                        Button { text: tx("action.delete_page"); enabled: pdfDocument.pageCount > 1; onClicked: pdfDocument.deletePage(pdfDocument.currentPage) }
                     }
                 }
             }
@@ -1468,9 +1717,13 @@ ApplicationWindow {
                     spacing: 18
                     clip: true
                     reuseItems: true
-                    cacheBuffer: appSettings.lowMemoryMode ? Math.round(height * 0.7) : Math.round(height * 1.8)
+                    cacheBuffer: appSettings.performanceProfile === "eco" ? Math.round(height * 0.55)
+                                 : appSettings.performanceProfile === "performance" ? Math.round(height * 2.0)
+                                 : Math.round(height * 1.25)
                     model: pdfDocument.pages
-                    currentIndex: pdfDocument.currentPage
+                    // currentIndex is intentionally not bound to currentPage. A
+                    // binding here makes ListView try to reposition itself when
+                    // Pointer/Text/Draw simply changes the active page.
                     highlightFollowsCurrentItem: false
                     boundsBehavior: Flickable.StopAtBounds
                     flickDeceleration: 2200
@@ -1504,6 +1757,8 @@ ApplicationWindow {
                         height: Math.max(80, pageHeight * zoom + 28)
                         property real pressX: 0
                         property real pressY: 0
+                        property real handStartContentX: 0
+                        property real handStartContentY: 0
                         property var localInkPoints: []
                         property bool drawingInk: false
                         property int paintedInkPoints: 0
@@ -1605,6 +1860,34 @@ ApplicationWindow {
                                 }
                             }
 
+                            Repeater {
+                                model: {
+                                    var revisionDependency = pdfDocument.pages.modelRevision
+                                    return pdfDocument.textAnnotations(index)
+                                }
+                                delegate: Rectangle {
+                                    required property var modelData
+                                    z: 28
+                                    x: modelData.x * pageSurface.width
+                                    y: modelData.y * pageSurface.height
+                                    width: Math.max(18, modelData.w * pageSurface.width)
+                                    height: Math.max(14, modelData.h * pageSurface.height)
+                                    color: selectedAnnotationPage === pageDelegate.index && selectedAnnotationId === modelData.id ? "#223b82f6" : "transparent"
+                                    border.width: selectedAnnotationPage === pageDelegate.index && selectedAnnotationId === modelData.id ? 2 : 0
+                                    border.color: accentColor
+                                    visible: tool === "select"
+                                    TapHandler {
+                                        enabled: tool === "select"
+                                        onTapped: {
+                                            selectedAnnotationPage = pageDelegate.index
+                                            selectedAnnotationId = modelData.id
+                                            clearTextSelection()
+                                            pdfDocument.currentPage = pageDelegate.index
+                                        }
+                                    }
+                                }
+                            }
+
                             Canvas {
                                 id: liveInk
                                 anchors.fill: parent
@@ -1702,16 +1985,26 @@ ApplicationWindow {
                                 z: 20
                                 anchors.fill: parent
                                 acceptedButtons: Qt.LeftButton
-                                enabled: pendingActionPage < 0 && (tool === "select" || !pdfDocument.locked) && !(Qt.platform.os === "android" && tool === "select")
+                                enabled: pendingActionPage < 0 && (tool === "select" || tool === "hand" || !pdfDocument.locked) && !(Qt.platform.os === "android" && tool === "select")
                                 hoverEnabled: true
                                 preventStealing: true
-                                cursorShape: tool === "text" ? Qt.IBeamCursor : tool === "draw" ? Qt.CrossCursor : tool === "redact" || tool === "crop" || tool === "highlight" ? Qt.CrossCursor : Qt.IBeamCursor
+                                cursorShape: tool === "hand" ? (pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor)
+                                           : tool === "text" ? Qt.IBeamCursor
+                                           : tool === "draw" || tool === "redact" || tool === "crop" || tool === "highlight" ? Qt.CrossCursor
+                                           : Qt.IBeamCursor
 
                                 onPressed: function(mouse) {
+                                    // Mark the page active without asking ListView to reposition.
+                                    // This prevents the old Pointer-click jump.
                                     pdfDocument.currentPage = index
                                     pageDelegate.pressX = mouse.x
                                     pageDelegate.pressY = mouse.y
-                                    if (tool === "text") {
+                                    if (tool === "select")
+                                        clearOverlaySelection()
+                                    if (tool === "hand") {
+                                        pageDelegate.handStartContentX = documentView.contentX
+                                        pageDelegate.handStartContentY = documentView.contentY
+                                    } else if (tool === "text") {
                                         textDlg.nx = mouse.x / Math.max(1, width)
                                         textDlg.ny = mouse.y / Math.max(1, height)
                                         textDlg.open()
@@ -1725,7 +2018,14 @@ ApplicationWindow {
                                 }
 
                                 onPositionChanged: function(mouse) {
-                                    if (pressed && tool === "draw" && pageDelegate.drawingInk) {
+                                    if (pressed && tool === "hand") {
+                                        var dxPan = mouse.x - pageDelegate.pressX
+                                        var dyPan = mouse.y - pageDelegate.pressY
+                                        var maxX = Math.max(0, documentView.contentWidth - documentView.width)
+                                        var maxY = Math.max(0, documentView.contentHeight - documentView.height)
+                                        documentView.contentX = Math.max(0, Math.min(maxX, pageDelegate.handStartContentX - dxPan))
+                                        documentView.contentY = Math.max(0, Math.min(maxY, pageDelegate.handStartContentY - dyPan))
+                                    } else if (pressed && tool === "draw" && pageDelegate.drawingInk) {
                                         var pts = pageDelegate.localInkPoints
                                         var nx = mouse.x / Math.max(1, width)
                                         var ny = mouse.y / Math.max(1, height)
@@ -1743,7 +2043,9 @@ ApplicationWindow {
                                 }
 
                                 onReleased: function(mouse) {
-                                    if (tool === "draw") {
+                                    if (tool === "hand") {
+                                        return
+                                    } else if (tool === "draw") {
                                         if (pageDelegate.localInkPoints.length >= 4)
                                             pdfDocument.addInkStyled(index, pageDelegate.localInkPoints, drawColor.toString(), Math.max(0.0006, drawWidth / Math.max(1, pageSurface.width)), drawOpacity)
                                         pageDelegate.localInkPoints = []
@@ -1766,6 +2068,14 @@ ApplicationWindow {
                                 }
 
                                 onWheel: function(wheel) {
+                                    if ((wheel.modifiers & Qt.ControlModifier) !== 0) {
+                                        if (wheel.angleDelta.y > 0 || wheel.pixelDelta.y > 0)
+                                            zoomIn()
+                                        else
+                                            zoomOut()
+                                        wheel.accepted = true
+                                        return
+                                    }
                                     var delta = wheel.pixelDelta.y !== 0 ? wheel.pixelDelta.y : wheel.angleDelta.y / 2
                                     var maxY = Math.max(0, documentView.contentHeight - documentView.height)
                                     documentView.contentY = Math.max(0, Math.min(maxY, documentView.contentY - delta))

@@ -1,4 +1,13 @@
-# MaenPDF 7.3.0 — Performance & Professional Tools
+# MaenPDF 7.3.1 — Shortcuts, Stability & Adaptive Performance
+
+- Added an Acrobat-familiar keyboard profile: Ctrl+=/Ctrl+- zoom, Ctrl+0/1/2 view sizing, Ctrl+K Preferences, Ctrl+Shift+N Go To Page, F4 Pages, V/H/T/U/D/C tools and Shift+Y Redact.
+- Added a bilingual in-app Keyboard Shortcuts reference and `docs/KEYBOARD_SHORTCUTS.md`.
+- Inserted text is now a lightweight structured overlay that can be selected and deleted with Delete/Backspace or a contextual button, with Undo/Redo and recovery serialization.
+- Fixed the Comment > Watermark action pointing at a non-existent dialog ID.
+- Removed automatic ListView `currentIndex` following that could make the PDF canvas and thumbnail strip jump when Pointer/tools changed the current page.
+- Added a Hand/Pan tool and guarded navigation/delete shortcuts so they never steal editing keys from focused text fields.
+- Added automatic RAM-aware Eco/Balanced/Performance profiles, including conservative budgets for 4 GB laptops.
+- Added image-decoder allocation limits and Release compiler/linker hardening.
 
 - Reworked live ink so pointer movement no longer clones and redraws the full stroke on every event.
 - Added point decimation and threaded incremental Canvas painting.

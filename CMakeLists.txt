@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(MaenPDF VERSION 7.3.0 LANGUAGES CXX)
+project(MaenPDF VERSION 7.3.1 LANGUAGES CXX)
 
 include(GNUInstallDirs)
 
@@ -47,6 +47,18 @@ target_link_libraries(MaenPDF PRIVATE
     Qt6::Core Qt6::Gui Qt6::Quick Qt6::Qml Qt6::QuickControls2 Qt6::Pdf Qt6::Concurrent
 )
 
+# Release hardening. MaenPDF is open source, so security must come from safe
+# design and platform mitigations rather than hidden code or embedded secrets.
+if(MSVC)
+    target_compile_options(MaenPDF PRIVATE $<$<CONFIG:Release>:/guard:cf> $<$<CONFIG:Release>:/sdl>)
+    target_link_options(MaenPDF PRIVATE $<$<CONFIG:Release>:/guard:cf> $<$<CONFIG:Release>:/DYNAMICBASE> $<$<CONFIG:Release>:/NXCOMPAT>)
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(MaenPDF PRIVATE $<$<CONFIG:Release>:-fstack-protector-strong> $<$<CONFIG:Release>:-fno-strict-overflow>)
+    if(UNIX AND NOT APPLE)
+        target_link_options(MaenPDF PRIVATE $<$<CONFIG:Release>:-Wl,-z,relro> $<$<CONFIG:Release>:-Wl,-z,now>)
+    endif()
+endif()
+
 if(NOT ANDROID)
     find_package(Qt6 6.11 REQUIRED COMPONENTS Widgets PrintSupport)
     target_link_libraries(MaenPDF PRIVATE Qt6::Widgets Qt6::PrintSupport)
@@ -72,8 +84,8 @@ if(ANDROID)
     set_property(TARGET MaenPDF PROPERTY QT_ANDROID_MIN_SDK_VERSION 28)
     set_property(TARGET MaenPDF PROPERTY QT_ANDROID_TARGET_SDK_VERSION 36)
     set_property(TARGET MaenPDF PROPERTY QT_ANDROID_COMPILE_SDK_VERSION 36)
-    set_property(TARGET MaenPDF PROPERTY QT_ANDROID_VERSION_CODE 70300)
-    set_property(TARGET MaenPDF PROPERTY QT_ANDROID_VERSION_NAME "7.3.0")
+    set_property(TARGET MaenPDF PROPERTY QT_ANDROID_VERSION_CODE 70301)
+    set_property(TARGET MaenPDF PROPERTY QT_ANDROID_VERSION_NAME "7.3.1")
 endif()
 
 if(ANDROID)

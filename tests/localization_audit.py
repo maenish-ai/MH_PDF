@@ -12,6 +12,8 @@ def visible_arabic(v):
     v=re.sub(r'\*\.[A-Za-z0-9]+','',v)
     v=re.sub(r'%\d+','',v)
     v=v.replace('MaenPDF','')
+    # Keyboard key labels are physical key names, not untranslated UI prose.
+    v=re.sub(r'\b(?:Ctrl|Shift|Alt|Esc|Enter|Tab|Home|End|Delete|Backspace|PageUp|PageDown)\b','',v)
     return v
 checks['Arabic catalog has Arabic for every entry']=all(k == 'app.brand' or re.search(r'[\u0600-\u06FF]',visible_arabic(v)) for k,v in ar.items())
 checks['Arabic catalog has no stray Latin UI words']=all(not re.search(r'[A-Za-z]{2,}',visible_arabic(v)) for v in ar.values())

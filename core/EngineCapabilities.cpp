@@ -40,6 +40,9 @@ QVariantMap EngineCapabilities::current() {
     capabilities[QStringLiteral("backendAbstraction")] = true;
     capabilities[QStringLiteral("memoryPolicy")] = true;
     capabilities[QStringLiteral("lowMemoryMode")] = true;
+    capabilities[QStringLiteral("adaptivePerformance")] = true;
+    capabilities[QStringLiteral("removableInsertedText")] = true;
+    capabilities[QStringLiteral("keyboardShortcutProfile")] = QStringLiteral("Acrobat-familiar");
     capabilities[QStringLiteral("lazyRendering")] = true;
     capabilities[QStringLiteral("renderCache")] = true;
     capabilities[QStringLiteral("androidContentUris")] = true;

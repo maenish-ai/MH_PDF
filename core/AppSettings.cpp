@@ -1,4 +1,5 @@
 #include "AppSettings.h"
+#include "MemoryPolicy.h"
 
 #include <QDesktopServices>
 #include <QFileInfo>
@@ -10,8 +11,12 @@ AppSettings::AppSettings(QObject *parent) : QObject(parent) {
 
     QSettings settings;
     m_darkMode = settings.value(QStringLiteral("ui/darkMode"), false).toBool();
-    m_lowMemoryMode = settings.value(QStringLiteral("performance/lowMemory"), false).toBool();
+    m_adaptivePerformance = settings.value(QStringLiteral("performance/adaptive"), true).toBool();
+    m_lowMemoryMode = m_adaptivePerformance
+        ? MemoryPolicy::totalSystemMemoryMB() <= 6144
+        : settings.value(QStringLiteral("performance/lowMemory"), false).toBool();
     m_safeGraphics = settings.value(QStringLiteral("performance/safeGraphics"), false).toBool();
+    m_singleKeyShortcuts = settings.value(QStringLiteral("input/singleKeyShortcuts"), true).toBool();
     m_recentFiles = settings.value(QStringLiteral("recent/files")).toStringList();
     m_supportUrl = settings.value(QStringLiteral("community/supportUrl"),
                                   qEnvironmentVariable("MAENPDF_SUPPORT_URL")).toString().trimmed();
@@ -25,13 +30,16 @@ void AppSettings::migrateSettings() {
     if (previous >= CurrentSettingsSchema)
         return;
 
-    // v7.1 establishes a small, versioned preferences contract. Old volatile
-    // UI/session/cache keys are discarded so stale values cannot break a new
-    // installation, while durable user choices remain compatible.
+    // Versioned preferences contract. Volatile window/session/cache state is
+    // discarded across incompatible releases; durable user choices survive.
     settings.remove(QStringLiteral("window"));
     settings.remove(QStringLiteral("session"));
     settings.remove(QStringLiteral("cache"));
     settings.remove(QStringLiteral("print"));
+    if (previous < 4) {
+        settings.setValue(QStringLiteral("performance/adaptive"), true);
+        settings.setValue(QStringLiteral("input/singleKeyShortcuts"), true);
+    }
     settings.setValue(QStringLiteral("meta/settingsSchemaVersion"), CurrentSettingsSchema);
     settings.sync();
 }
@@ -59,6 +67,19 @@ QVariantList AppSettings::recentFiles() const {
     return result;
 }
 
+QString AppSettings::performanceProfile() const {
+    if (!m_adaptivePerformance)
+        return m_lowMemoryMode ? QStringLiteral("eco") : QStringLiteral("balanced");
+    const qint64 mb = MemoryPolicy::totalSystemMemoryMB();
+    if (mb <= 6144) return QStringLiteral("eco");
+    if (mb <= 12288) return QStringLiteral("balanced");
+    return QStringLiteral("performance");
+}
+
+qint64 AppSettings::totalMemoryMB() const {
+    return MemoryPolicy::totalSystemMemoryMB();
+}
+
 void AppSettings::setDarkMode(bool value) {
     if (m_darkMode == value)
         return;
@@ -67,12 +88,41 @@ void AppSettings::setDarkMode(bool value) {
     emit darkModeChanged();
 }
 
-void AppSettings::setLowMemoryMode(bool value) {
-    if (m_lowMemoryMode == value)
+void AppSettings::refreshAdaptiveMemoryChoice() {
+    if (!m_adaptivePerformance)
         return;
+    const bool recommended = MemoryPolicy::totalSystemMemoryMB() <= 6144;
+    if (m_lowMemoryMode != recommended) {
+        m_lowMemoryMode = recommended;
+        emit lowMemoryModeChanged();
+    }
+}
+
+void AppSettings::setLowMemoryMode(bool value) {
+    const bool adaptiveWasEnabled = m_adaptivePerformance;
+    m_adaptivePerformance = false; // a manual choice becomes an explicit override
+    if (adaptiveWasEnabled) {
+        QSettings().setValue(QStringLiteral("performance/adaptive"), false);
+        emit adaptivePerformanceChanged();
+    }
+    if (m_lowMemoryMode == value) {
+        emit performanceProfileChanged();
+        return;
+    }
     m_lowMemoryMode = value;
     QSettings().setValue(QStringLiteral("performance/lowMemory"), value);
     emit lowMemoryModeChanged();
+    emit performanceProfileChanged();
+}
+
+void AppSettings::setAdaptivePerformance(bool value) {
+    if (m_adaptivePerformance == value)
+        return;
+    m_adaptivePerformance = value;
+    QSettings().setValue(QStringLiteral("performance/adaptive"), value);
+    refreshAdaptiveMemoryChoice();
+    emit adaptivePerformanceChanged();
+    emit performanceProfileChanged();
 }
 
 void AppSettings::setSafeGraphics(bool value) {
@@ -81,6 +131,14 @@ void AppSettings::setSafeGraphics(bool value) {
     m_safeGraphics = value;
     QSettings().setValue(QStringLiteral("performance/safeGraphics"), value);
     emit safeGraphicsChanged();
+}
+
+void AppSettings::setSingleKeyShortcuts(bool value) {
+    if (m_singleKeyShortcuts == value)
+        return;
+    m_singleKeyShortcuts = value;
+    QSettings().setValue(QStringLiteral("input/singleKeyShortcuts"), value);
+    emit singleKeyShortcutsChanged();
 }
 
 void AppSettings::persistRecentFiles() {
@@ -137,6 +195,8 @@ void AppSettings::resetApplicationSettings(bool keepLanguage) {
     const QString support = settings.value(QStringLiteral("community/supportUrl"), m_supportUrl).toString();
     settings.clear();
     settings.setValue(QStringLiteral("meta/settingsSchemaVersion"), CurrentSettingsSchema);
+    settings.setValue(QStringLiteral("performance/adaptive"), true);
+    settings.setValue(QStringLiteral("input/singleKeyShortcuts"), true);
     if (keepLanguage)
         settings.setValue(QStringLiteral("ui/language"), language == QStringLiteral("ar") ? QStringLiteral("ar") : QStringLiteral("en"));
     if (!support.trimmed().isEmpty())
@@ -144,13 +204,18 @@ void AppSettings::resetApplicationSettings(bool keepLanguage) {
     settings.sync();
 
     m_darkMode = false;
-    m_lowMemoryMode = false;
+    m_adaptivePerformance = true;
+    m_lowMemoryMode = MemoryPolicy::totalSystemMemoryMB() <= 6144;
     m_safeGraphics = false;
+    m_singleKeyShortcuts = true;
     m_recentFiles.clear();
     m_supportUrl = support.trimmed();
     emit darkModeChanged();
+    emit adaptivePerformanceChanged();
     emit lowMemoryModeChanged();
+    emit performanceProfileChanged();
     emit safeGraphicsChanged();
+    emit singleKeyShortcutsChanged();
     emit recentFilesChanged();
     emit supportUrlChanged();
     emit settingsReset();

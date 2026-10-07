@@ -1,4 +1,4 @@
-# MaenPDF 7.3.0 — Build Status
+# MaenPDF 7.3.1 — Build Status
 
 ## Local verification
 The source bundle must pass all source-level release gates before packaging:
@@ -14,7 +14,12 @@ The source bundle must pass all source-level release gates before packaging:
 
 Run `python scripts/preflight.py`.
 
-## 7.3 performance changes
+## 7.3.1 stability/performance changes
+- Acrobat-familiar shortcut profile has a dedicated static audit, including text-input focus guards.
+- Inserted text deletion is covered by the native interaction smoke test.
+- Dialog/action references are audited so menu commands cannot silently point to missing dialog IDs.
+- Adaptive RAM profiles select conservative render/cache/undo budgets automatically on 4–6 GB machines.
+- Release hardening covers control-flow/DEP-ASLR on MSVC, stack protection/RELRO where supported, plus a Qt image allocation ceiling.
 - Incremental and spatially-decimated ink preview; no full stroke-array clone per pointer event.
 - Bounded undo history and reduced/quantized render cache.
 - Serialized shared render cache for asynchronous image requests.

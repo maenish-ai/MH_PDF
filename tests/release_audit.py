@@ -11,11 +11,11 @@ ard=(root/'android/README.md').read_text(encoding='utf-8')
 iss=(root/'installer/MaenPDF.iss').read_text(encoding='utf-8')
 pre=(root/'scripts/preflight.py').read_text(encoding='utf-8')
 checks.update({
- 'v7.3 semantic version':'project(MaenPDF VERSION 7.3.0' in cm,
+ 'v7.3 semantic version':'project(MaenPDF VERSION 7.3.1' in cm,
  'v7 QML module':'VERSION 7.0' in cm,
  'stable package id':'org.orbispdf.app' in cm and 'org.orbispdf.app' in ard,
- 'version code 70300':'QT_ANDROID_VERSION_CODE 70300' in cm,
- 'version name 7.3':'QT_ANDROID_VERSION_NAME "7.3.0"' in cm,
+ 'version code 70301':'QT_ANDROID_VERSION_CODE 70301' in cm,
+ 'version name 7.3.1':'QT_ANDROID_VERSION_NAME "7.3.1"' in cm,
  'api36 target':'QT_ANDROID_TARGET_SDK_VERSION 36' in cm and "ANDROID_API: '36'" in wf,
  'min api28':'QT_ANDROID_MIN_SDK_VERSION 28' in cm and "ANDROID_MIN_API: '28'" in wf,
  'Qt pinned':'QT_VERSION: \'6.11.2\'' in wf,
@@ -25,7 +25,7 @@ checks.update({
  'Windows staged runtime startup smoke test':'Smoke test staged MaenPDF with native Windows platform' in wf and 'Remove-Item Env:QT_QPA_PLATFORM' in wf,
  'Windows real PDF open smoke test':'Smoke test staged MaenPDF opening PDF fixture' in wf and 'create_smoke_pdf.py' in wf and 'Cannot assign to non-existent property' in wf,
  'Windows interaction engine smoke test':'Exercise text selection drawing crop and redaction engine' in wf and '--interaction-smoke' in wf and 'INTERACTION_SMOKE_PASS' in wf,
- 'Windows installer v7.3':'#define MyAppVersion "7.3.0"' in iss and 'VersionInfoVersion=7.3.0.0' in iss,
+ 'Windows installer v7.3':'#define MyAppVersion "7.3.1"' in iss and 'VersionInfoVersion=7.3.1.0' in iss,
  'Windows clean application upgrade':'[InstallDelete]' in iss and 'Type: filesandordirs; Name: "{app}\\*"' in iss,
  'Windows one-time settings migration':'SettingsGeneration' in iss and 'ResetMaenPDFUserState' in iss and 'NeedsFirstCleanMigration' in iss,
  'desktop native print support':'Qt6::PrintSupport' in cm and 'core/PrintService.cpp' in cm,
@@ -53,8 +53,8 @@ checks.update({
  'PDF open intent':'android.intent.action.VIEW' in manifest and 'application/pdf' in manifest,
  'signing secrets excluded':'*.jks' in (root/'.gitignore').read_text(encoding='utf-8'),
  'updates documented':'same package ID' in ard and 'same signing key' in ard,
- 'v7 audits in preflight':all(x in pre for x in ['engine_v7_audit.py','security_audit.py','performance_audit.py','interaction_audit.py','open_source_audit.py']),
- 'v7 audits in CI':all(x in wf for x in ['engine_v7_audit.py','security_audit.py','performance_audit.py','interaction_audit.py','open_source_audit.py']),
+ 'v7 audits in preflight':all(x in pre for x in ['engine_v7_audit.py','security_audit.py','performance_audit.py','interaction_audit.py','shortcuts_audit.py','ui_wiring_audit.py','open_source_audit.py']),
+ 'v7 audits in CI':all(x in wf for x in ['engine_v7_audit.py','security_audit.py','performance_audit.py','interaction_audit.py','shortcuts_audit.py','ui_wiring_audit.py','open_source_audit.py']),
 })
 for n,v in checks.items(): print(('PASS' if v else 'FAIL'),n)
 sys.exit(0 if all(checks.values()) else 1)

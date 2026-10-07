@@ -64,7 +64,9 @@ public:
     Q_INVOKABLE void copyPage(int page);
     Q_INVOKABLE void pastePage(int afterIndex);
     Q_INVOKABLE void addImage(int page, const QString &path, double x = .15, double y = .15, double w = .5, double h = .5);
-    Q_INVOKABLE void addText(int page, double x, double y, const QString &text, int fontSize = 18);
+    Q_INVOKABLE QString addText(int page, double x, double y, const QString &text, int fontSize = 18);
+    Q_INVOKABLE QVariantList textAnnotations(int page) const;
+    Q_INVOKABLE bool deleteTextAnnotation(int page, const QString &id);
     Q_INVOKABLE void addHighlight(int page, double x, double y, double w, double h);
     Q_INVOKABLE void addHighlightRects(int page, const QVariantList &rects, const QString &color = QStringLiteral("#FFD740"), int opacity = 42);
     Q_INVOKABLE void addRedaction(int page, double x, double y, double w, double h);

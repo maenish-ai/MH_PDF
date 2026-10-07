@@ -2,6 +2,8 @@
 #include "MemoryPolicy.h"
 
 #include <QPainter>
+#include <QColor>
+#include <QFont>
 #include <QMutexLocker>
 #include <QTransform>
 #include <QUuid>
@@ -234,6 +236,23 @@ QImage PageModel::renderPage(int row, const QSize &requestedSize) const {
 
     if (!page.overlay.isNull())
         painter.drawImage(base.rect(), page.overlay);
+
+    // Keep inserted text as lightweight structured overlays instead of baking
+    // it immediately into a page-sized bitmap. This makes inserted text
+    // selectable/removable and avoids a full overlay copy for every text edit.
+    for (const TextOverlayItem &item : page.textItems) {
+        if (item.text.isEmpty())
+            continue;
+        QFont font;
+        const qreal scale = base.height() / qMax<qreal>(1.0, page.points.height());
+        font.setPixelSize(qMax(8, qRound(item.fontSize * scale)));
+        painter.setFont(font);
+        QColor color(item.color);
+        if (!color.isValid())
+            color = QColor(QStringLiteral("#111827"));
+        painter.setPen(color);
+        painter.drawText(QPointF(item.x * base.width(), item.y * base.height()), item.text);
+    }
 
     if (!page.watermarkText.isEmpty() && page.watermarkOpacity > 0) {
         painter.save();

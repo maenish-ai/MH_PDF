@@ -7,6 +7,7 @@
 #include <QApplication>
 #endif
 #include <QIcon>
+#include <QImageReader>
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
@@ -36,6 +37,7 @@
 #include "../core/AppSettings.h"
 #include "../core/DocumentManager.h"
 #include "../core/LanguageManager.h"
+#include "../core/MemoryPolicy.h"
 #include "../core/PdfToolsService.h"
 #include "../core/PdfDocument.h"
 #include "../core/PrintService.h"
@@ -75,8 +77,18 @@ int main(int argc, char *argv[])
     QGuiApplication::setOrganizationName(QStringLiteral("MaenPDF"));
     QGuiApplication::setOrganizationDomain(QStringLiteral("maenpdf.local"));
     QGuiApplication::setApplicationName(QStringLiteral("MaenPDF"));
-    QGuiApplication::setApplicationVersion(QStringLiteral("7.3.0"));
+    QGuiApplication::setApplicationVersion(QStringLiteral("7.3.1"));
     AppLogger::install();
+
+    // Bound image decoder allocations before any user-controlled image is
+    // decoded. The adaptive profile uses a stricter cap on 4–6 GB machines.
+    const int imageAllocationLimitMB = MemoryPolicy::performanceProfile() == QStringLiteral("eco") ? 96 : 256;
+    QImageReader::setAllocationLimit(imageAllocationLimitMB);
+    AppLogger::write(QStringLiteral("INFO"),
+                     QStringLiteral("Adaptive profile=%1; detectedRamMB=%2; imageAllocationLimitMB=%3")
+                         .arg(MemoryPolicy::performanceProfile())
+                         .arg(MemoryPolicy::totalSystemMemoryMB())
+                         .arg(imageAllocationLimitMB));
 
 #ifdef Q_OS_WIN
     // Use Qt's accelerated renderer by default. Software rendering is kept as a
@@ -109,7 +121,7 @@ int main(int argc, char *argv[])
     QDir::setCurrent(QCoreApplication::applicationDirPath());
 
     AppLogger::write(QStringLiteral("INFO"),
-                     QStringLiteral("MaenPDF 7.3.0 startup; Qt %1; appDir=%2; cwd=%3; QT_QUICK_BACKEND=%4")
+                     QStringLiteral("MaenPDF 7.3.1 startup; Qt %1; appDir=%2; cwd=%3; QT_QUICK_BACKEND=%4")
                          .arg(QString::fromLatin1(qVersion()),
                               QCoreApplication::applicationDirPath(),
                               QDir::currentPath(),
@@ -170,6 +182,12 @@ int main(int argc, char *argv[])
             }
 
             document->addHighlightRects(0, selectionRects, QStringLiteral("#FFD54F"), 42);
+            const QString insertedTextId = document->addText(0, 0.20, 0.30, QStringLiteral("interaction text"), 18);
+            if (insertedTextId.isEmpty() || document->textAnnotations(0).isEmpty()
+                || !document->deleteTextAnnotation(0, insertedTextId) || !document->textAnnotations(0).isEmpty()) {
+                AppLogger::write(QStringLiteral("FATAL"), QStringLiteral("INTERACTION_SMOKE_TEXT_DELETE_FAILED"));
+                return EXIT_FAILURE;
+            }
             document->addInkStyled(0, QVariantList{0.15, 0.20, 0.30, 0.24, 0.45, 0.21},
                                    QStringLiteral("#2563EB"), 0.004, 100);
             document->addRedaction(1, 0.12, 0.12, 0.22, 0.08);

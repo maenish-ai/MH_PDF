@@ -33,8 +33,8 @@ This matrix records ideas worth adopting without copying proprietary code or UI.
 - Local optional Tesseract OCR (English + Arabic default).
 - Local optional LibreOffice bridge.
 - Compare, image export, image-to-PDF, safe flatten/privacy sanitize and batch optimize.
-- Ctrl+K command palette, EN/AR and RTL/LTR.
-- 7.3 performance work: incremental ink preview, background local tools, idle recovery, bounded caches/undo, accelerated graphics by default with safe fallback.
+- Acrobat-familiar shortcuts, Ctrl+Shift+P command palette, EN/AR and RTL/LTR.
+- 7.3.1 performance work: incremental ink preview, background local tools, idle recovery, bounded caches/undo, accelerated graphics by default with safe fallback.
 
 ### Must be implemented only with a real backend
 - Structural edit/reflow of existing PDF text and images.

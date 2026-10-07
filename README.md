@@ -1,9 +1,13 @@
-# MaenPDF 7.3
+# MaenPDF 7.3.1
 
 MaenPDF is a free, local-first, bilingual PDF workspace written in C++17 with Qt/QML. Its product goals are **fast, private, free and open**. Documents are processed on the user's device; the core application does not require a cloud account, subscription, telemetry service or mandatory network connection.
 
-## 7.3 Performance & Professional Tools Release
+## 7.3.1 Shortcuts, Stability & Adaptive Performance Release
 - Full English/Arabic catalogs with persistent language choice and automatic LTR/RTL layout.
+- Inserted text is now a structured MaenPDF overlay: immediately selected after creation and removable with Delete/Backspace or the contextual Delete control, with Undo/Redo.
+- Fixed automatic viewport/sidebar jumping by decoupling current-page tracking from ListView currentIndex and limiting explicit repositioning to navigation actions.
+- Adaptive performance detects available system RAM and selects Eco/Balanced/Performance budgets automatically; 4–6 GB computers receive tighter render/cache/undo limits.
+- Release builds add compiler/linker hardening and image-decoder allocation limits while keeping all document processing local.
 - Continuous virtualized multi-page reader with tabs, thumbnails, search, text selection, zoom and mouse-wheel navigation.
 - Pointer/text selection, text insertion, geometry-aware highlight, live ink, crop preview and staged flattened redaction.
 - Incremental/decimated live ink: long strokes no longer clone and repaint the complete path on every pointer event.
@@ -16,7 +20,7 @@ MaenPDF is a free, local-first, bilingual PDF workspace written in C++17 with Qt
 - Optional local qpdf tools for AES-256 protection, decrypt, optimize, linearize, repair/check and batch optimization.
 - Optional local Tesseract OCR (English + Arabic default) and optional LibreOffice conversion bridge.
 - Compare PDFs, image/page export, image-to-PDF and privacy-oriented safe flattening.
-- Ctrl+K command palette, Recent Files, drag/drop, unsaved-change guards and clean Windows upgrades.
+- Acrobat-familiar shortcuts (including Ctrl+= / Ctrl+- zoom, Ctrl+K Preferences, V/H/T/U/D/C tools), a separate Ctrl+Shift+P Command Palette, Recent Files, drag/drop, unsaved-change guards and clean Windows upgrades.
 
 ## Performance model
 Only visible/nearby page delegates are instantiated. Page images load asynchronously, Qt PDF document access is mutex-serialized and the shared render cache is bounded and serialized. Nearby zoom sizes share cache buckets rather than creating a bitmap for every pixel-size variation. Low Memory Mode reduces cache/render/undo budgets further.

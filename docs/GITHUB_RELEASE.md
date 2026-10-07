@@ -1,36 +1,42 @@
-# GitHub and Store Release Guide — MaenPDF 6
+# GitHub and Store Release Guide — MaenPDF 7.3.1
 
 ## Repository layout
 Upload the **contents** of the MaenPDF folder to the repository root, including `.github/`.
 
 ## Continuous integration
 Every push to `main` or `develop`, and every pull request, runs:
-1. source/reliability audit;
-2. bilingual localization audit;
+1. source/reliability and QML wiring audits;
+2. bilingual EN/AR localization audit;
 3. release/packaging audit;
-4. engine-v6 architecture audit;
-5. Windows 10/11 x64 build and deployment;
-6. Android APK and AAB build.
+4. engine-v7 architecture, security, performance, interaction and shortcut audits;
+5. Windows 10/11 x64 build, native runtime smoke tests, interaction stress test and installer smoke test;
+6. Android multi-ABI installable APK build and signature verification.
 
-The build jobs depend on the audit job, so packaging cannot start when a release gate fails.
+The build jobs depend on the audit job, so packaging cannot start when a release gate fails. Standard CI intentionally does **not** upload a Windows Portable artifact and does not build a Play AAB on every push.
 
 ## Stable Android identity
 - Package ID: `org.orbispdf.app`
-- v6 versionName: `6.0.11`
-- v6 versionCode: `60011`
+- versionName: `7.3.1`
+- versionCode: `70301`
 - minSdk: 28
 - target/compile SDK: 36
 
-After first publication, never change the package ID or Play signing identity. Increase versionCode on every Play upload.
+After first publication, never change the package ID or production signing identity. Increase versionCode on every production Android upload.
 
-## Signing
-CI intentionally produces unsigned validation artifacts. Do not commit keystores or passwords. When a Play Console application is created, enable Play App Signing and keep the upload key outside the repository (for example in GitHub Actions secrets).
+## CI APK versus production APK
+Standard CI creates `MaenPDF-Android-CI-Test.apk` with an ephemeral CI-only signing key. It is installable for testing, but the key changes between runs and therefore it is **not** the long-term production update identity.
+
+The manual `.github/workflows/play-release.yml` workflow uses persistent protected GitHub signing secrets and produces:
+- `MaenPDF-Android-Release.apk` for direct installation/distribution;
+- `MaenPDF-Android-Play.aab` for Google Play.
+
+Required secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEY_ALIAS`, `ANDROID_KEYSTORE_PASSWORD`, and `ANDROID_KEY_PASSWORD`. Signing material must never be committed to the repository.
+
+## Windows artifact
+The normal Windows release artifact is `MaenPDF-Windows-Setup` containing `MaenPDF-Setup.exe`. `dist/` exists only as an internal staging directory used to test the exact deployed runtime before building the installer.
 
 ## Compatibility
-The modern v6 line is tested/configured for Windows 10/11 and Android API 28+. Windows 7/8 and Android below API 28 require separately maintained legacy toolchains and should not be advertised as supported until their own CI/regression matrix exists.
+The current line is configured for Windows 10/11 x64 and Android API 28+. Older operating systems require separate toolchains and should not be advertised as supported until they have their own CI/regression matrix.
 
-## First GitHub run
-A local audit cannot prove the behavior of a hosted runner. After the first push, open **Actions → MaenPDF CI** and confirm all jobs are green. If a runner/provider changes upstream, use the failing GitHub log as the source of truth rather than weakening the audits.
-
-## Play signing workflow
-`.github/workflows/play-release.yml` is manual-only. Before using it, create these GitHub Actions secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEY_ALIAS`, `ANDROID_KEYSTORE_PASSWORD`, and `ANDROID_KEY_PASSWORD`. The workflow decodes the upload keystore only inside the hosted runner and uses Qt's `QT_ANDROID_SIGN_AAB`/`QT_ANDROID_SIGN_APK` signing path.
+## Build authority
+Local audits catch source, wiring, localization, packaging and policy regressions. The hosted GitHub Actions Windows/Android run remains the authoritative native compile/package/runtime gate. Never describe a source bundle as GitHub-green until that exact commit has completed successfully.

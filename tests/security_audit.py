@@ -15,6 +15,9 @@ checks={
  'security policy exists':(r/'SECURITY.md').exists(),
  'brand signing policy':'Official signing keys' in (r/'BRAND_POLICY.md').read_text(encoding='utf-8'),
  'no cloud rule documented':'does not upload user PDFs' in (r/'SECURITY.md').read_text(encoding='utf-8'),
+ 'hostile image allocation bounded':'QImageReader::setAllocationLimit' in (r/'app/main.cpp').read_text(encoding='utf-8'),
+ 'release compiler hardening':'/guard:cf' in (r/'CMakeLists.txt').read_text(encoding='utf-8') and '-fstack-protector-strong' in (r/'CMakeLists.txt').read_text(encoding='utf-8'),
+ 'release linker hardening':'DYNAMICBASE' in (r/'CMakeLists.txt').read_text(encoding='utf-8') and 'relro' in (r/'CMakeLists.txt').read_text(encoding='utf-8').lower(),
 }
 for n,v in checks.items(): print(('PASS' if v else 'FAIL'),n)
 sys.exit(0 if all(checks.values()) else 1)

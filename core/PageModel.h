@@ -10,6 +10,17 @@
 #include <QVector>
 #include <functional>
 
+struct TextOverlayItem {
+    QString id;
+    QString text;
+    double x{0.15};       // normalized baseline x
+    double y{0.20};       // normalized baseline y
+    double width{0.10};   // normalized selection bounds
+    double height{0.03};  // normalized selection bounds
+    int fontSize{18};
+    QString color{QStringLiteral("#111827")};
+};
+
 struct PageItem {
     QImage base;
     QImage overlay;
@@ -25,6 +36,7 @@ struct PageItem {
     int watermarkOpacity{0};
     bool pageNumber{false};
     QString batesText;
+    QVector<TextOverlayItem> textItems;
 
     bool sourceBacked() const { return !sourceId.isEmpty() && sourcePage >= 0 && base.isNull(); }
 };

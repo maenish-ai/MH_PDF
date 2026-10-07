@@ -10,6 +10,8 @@ tests=[
     'security_audit.py',
     'performance_audit.py',
     'interaction_audit.py',
+    'shortcuts_audit.py',
+    'ui_wiring_audit.py',
     'open_source_audit.py',
 ]
 for test in tests:

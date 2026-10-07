@@ -38,6 +38,9 @@ checks.update({
  'honest forms capability':'acroFormAuthoring' in cap and '= false' in cap,
  'secure flattened redaction capability':'secureFlattenedRedaction' in cap and 'addRedaction' in cpp,
  'bilingual capability':'bilingualUi' in cap,
+ 'adaptive performance capability':'adaptivePerformance' in cap,
+ 'removable inserted text capability':'removableInsertedText' in cap and 'deleteTextAnnotation' in h,
+ 'shortcut profile capability':'keyboardShortcutProfile' in cap,
  'no cloud capability':'localOnlyProcessing' in cap and 'cloudUpload' in cap and '= false' in cap,
 })
 for n,v in checks.items(): print(('PASS' if v else 'FAIL'),n)

@@ -1,6 +1,10 @@
-# MaenPDF 7.3.0 — Release Checklist
+# MaenPDF 7.3.1 — Release Checklist
 
 ## Interaction and UX
+- [x] Inserted text can be selected and deleted without rasterizing the page.
+- [x] Delete/Backspace never hijack a focused text field.
+- [x] Acrobat-familiar shortcut profile and bilingual shortcut reference added.
+- [x] Pointer/current-page tracking no longer auto-repositions the main viewer or thumbnail strip.
 - [x] Continuous page scrolling replaces the single fixed page viewer.
 - [x] Pointer selects source PDF text.
 - [x] Copy selected text and Highlight Selection are wired.
@@ -13,6 +17,9 @@
 - [x] Toolbar has differentiated tool colors and contextual hints.
 
 ## Performance and privacy
+- [x] Adaptive RAM detection selects Eco/Balanced/Performance budgets automatically.
+- [x] 4 GB-class computers use conservative cache/render/undo limits.
+- [x] Release compiler/linker hardening and image decoder allocation limits are enabled.
 - [x] Visible page delegates are virtualized/reused.
 - [x] Bounded LRU render cache and Low Memory Mode retained.
 - [x] Page and thumbnail images request asynchronous rendering.
@@ -21,7 +28,7 @@
 - [x] No document cloud upload path exists in the core.
 
 ## Windows
-- [x] Version `7.3.0`.
+- [x] Version `7.3.1`.
 - [x] Clean application-directory replacement on update retained.
 - [x] Native Print / Print Current Page / Print Preview retained.
 - [x] VC143 runtime remains bundled side-by-side.
@@ -30,8 +37,8 @@
 
 ## Android
 - [x] Package ID remains `org.orbispdf.app` for update continuity.
-- [x] versionName `7.3.0`.
-- [x] versionCode `70300`.
+- [x] versionName `7.3.1`.
+- [x] versionCode `70301`.
 - [x] Target API 36 / minimum API 28.
 - [x] Signed installable CI APK preserved before AAB build.
 

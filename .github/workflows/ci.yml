@@ -37,6 +37,8 @@ jobs:
           python tests/security_audit.py
           python tests/performance_audit.py
           python tests/interaction_audit.py
+          python tests/shortcuts_audit.py
+          python tests/ui_wiring_audit.py
           python tests/open_source_audit.py
           python -m compileall -q tests
 

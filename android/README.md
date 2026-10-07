@@ -1,6 +1,6 @@
 # MaenPDF Android
 
-MaenPDF 7 targets Android API 36 with minimum API 28. The internal package ID remains `org.orbispdf.app` for update continuity with earlier builds.
+MaenPDF 7.3.1 targets Android API 36 with minimum API 28. The internal package ID remains `org.orbispdf.app` for update continuity with earlier builds. This source bundle uses versionName `7.3.1` and versionCode `70301`.
 
 ## CI test installation
 
