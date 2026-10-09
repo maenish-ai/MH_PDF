@@ -53,12 +53,23 @@ Name: "{autodesktop}\MaenPDF"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch MaenPDF"; Flags: nowait postinstall skipifsilent
 
 [Registry]
-Root: HKCU; Subkey: "Software\Classes\MaenPDF.Document"; ValueType: string; ValueName: ""; ValueData: "MaenPDF PDF Document"; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\MaenPDF.Document\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\MaenPDF.exe,0"
-Root: HKCU; Subkey: "Software\Classes\MaenPDF.Document\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\MaenPDF.exe"" ""%1"""
-Root: HKCU; Subkey: "Software\Classes\.pdf\OpenWithProgids"; ValueType: none; ValueName: "MaenPDF.Document"; Flags: uninsdeletevalue
+Root: HKLM; Subkey: "Software\Classes\MaenPDF.Document"; ValueType: string; ValueName: ""; ValueData: "MaenPDF PDF Document"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\Classes\MaenPDF.Document\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\MaenPDF.exe,0"
+Root: HKLM; Subkey: "Software\Classes\MaenPDF.Document\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\MaenPDF.exe"" ""%1"""
+Root: HKLM; Subkey: "Software\Classes\.pdf\OpenWithProgids"; ValueType: none; ValueName: "MaenPDF.Document"; Flags: uninsdeletevalue
 Root: HKCU; Subkey: "Software\MaenPDF\Installer"; ValueType: string; ValueName: "SettingsGeneration"; ValueData: "{#MySettingsGeneration}"; Flags: uninsdeletevalue
 Root: HKCU; Subkey: "Software\MaenPDF\Installer"; ValueType: string; ValueName: "InstalledVersion"; ValueData: "{#MyAppVersion}"; Flags: uninsdeletevalue
+
+; Machine-wide registration: visible even when Setup is elevated by another account.
+Root: HKLM; Subkey: "Software\Classes\Applications\MaenPDF.exe"; ValueType: string; ValueName: "FriendlyAppName"; ValueData: "MaenPDF"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\Classes\Applications\MaenPDF.exe\SupportedTypes"; ValueType: string; ValueName: ".pdf"; ValueData: ""
+Root: HKLM; Subkey: "Software\Classes\Applications\MaenPDF.exe\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\MaenPDF.exe"" ""%1"""
+Root: HKLM; Subkey: "Software\MaenPDF\Capabilities"; ValueType: string; ValueName: "ApplicationName"; ValueData: "MaenPDF"; Flags: uninsdeletekey
+Root: HKLM; Subkey: "Software\MaenPDF\Capabilities"; ValueType: string; ValueName: "ApplicationDescription"; ValueData: "View and edit PDF documents with MaenPDF"
+Root: HKLM; Subkey: "Software\MaenPDF\Capabilities"; ValueType: string; ValueName: "ApplicationIcon"; ValueData: "{app}\MaenPDF.exe,0"
+Root: HKLM; Subkey: "Software\MaenPDF\Capabilities\FileAssociations"; ValueType: string; ValueName: ".pdf"; ValueData: "MaenPDF.Document"
+Root: HKLM; Subkey: "Software\RegisteredApplications"; ValueType: string; ValueName: "MaenPDF"; ValueData: "Software\MaenPDF\Capabilities"; Flags: uninsdeletevalue
+Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\App Paths\MaenPDF.exe"; ValueType: string; ValueName: ""; ValueData: "{app}\MaenPDF.exe"; Flags: uninsdeletekey
 
 [Code]
 function NeedsFirstCleanMigration(): Boolean;

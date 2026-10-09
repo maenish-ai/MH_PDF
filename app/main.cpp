@@ -158,10 +158,11 @@ int main(int argc, char *argv[])
     QFile::remove(graphicsMarker);
 #endif
 
-    if (argc > 1) {
-        const QString firstArgument = QString::fromLocal8Bit(argv[1]);
+    const QStringList launchArguments = QCoreApplication::arguments();
+    if (launchArguments.size() > 1) {
+        const QString firstArgument = launchArguments.at(1);
         if (firstArgument == QStringLiteral("--interaction-smoke")) {
-            if (argc < 3 || !documentManager.openDocument(QString::fromLocal8Bit(argv[2]))) {
+            if (launchArguments.size() < 3 || !documentManager.openDocument(launchArguments.at(2))) {
                 AppLogger::write(QStringLiteral("FATAL"), QStringLiteral("INTERACTION_SMOKE_OPEN_FAILED"));
                 return EXIT_FAILURE;
             }
