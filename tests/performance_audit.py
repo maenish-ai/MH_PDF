@@ -30,7 +30,7 @@ checks={
  'lightweight recovery journal':'MaenPDF-Recovery-1' in (r/'core/PdfDocument.cpp').read_text(encoding='utf-8') and 'Recovery journal updated' in (r/'core/PdfDocument.cpp').read_text(encoding='utf-8') and 'QJsonDocument(root).toJson' in (r/'core/PdfDocument.cpp').read_text(encoding='utf-8'),
  'incremental live ink':'paintedInkPoints' in qml and 'localInkPoints.slice(0)' not in qml,
  'threaded live ink canvas':'renderStrategy: Canvas.Threaded' in qml,
- 'bounded undo':'setUndoLimit(MemoryPolicy::undoLimit())' in (r/'core/PdfDocument.cpp').read_text(encoding='utf-8'),
+ 'unlimited undo history':'setUndoLimit(MemoryPolicy::undoLimit())' in (r/'core/PdfDocument.cpp').read_text(encoding='utf-8') and 'return 0;' in mem,
  'draw undo stores touched patch':'beforePatch = page->overlay.copy(patchRect)' in (r/'core/PdfDocument.cpp').read_text(encoding='utf-8') and 'CompositionMode_Source' in (r/'core/PdfDocument.cpp').read_text(encoding='utf-8'),
  'highlight/redaction undo stores touched patches':'pixelBounds' in (r/'core/PdfDocument.cpp').read_text(encoding='utf-8') and (r/'core/PdfDocument.cpp').read_text(encoding='utf-8').count('beforePatch = page->overlay.copy') >= 3,
  'inserted text avoids page bitmap copies':'TextOverlayItem' in (r/'core/PageModel.h').read_text(encoding='utf-8') and 'page.textItems' in pm,

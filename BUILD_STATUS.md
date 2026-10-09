@@ -1,4 +1,4 @@
-# MaenPDF 7.4.1 — Build Status
+# MaenPDF 7.5.0 — Build Status
 
 ## Local verification
 The source bundle must pass all source-level release gates before packaging:
@@ -14,12 +14,12 @@ The source bundle must pass all source-level release gates before packaging:
 
 Run `python scripts/preflight.py`.
 
-## 7.4.1 compile stabilization
+## 7.5.0 compile stabilization
 - Fixes the cross-platform Qt 6.11 build failure in inserted-text move/resize caused by passing `-1` to `QVariant::toInt(bool*)`. Defaults are now applied at `QVariantMap::value(key, default)` before conversion.
 - Adds `compiler_guard_audit.py` to local preflight and GitHub source gates so this QVariant API misuse cannot silently pass source audits again.
 - Keeps the full 7.4 editing, forms, zero-freeze zoom, adaptive-memory, security and packaging behavior unchanged.
 
-## 7.4.1 zero-freeze/editing changes
+## 7.5.0 zero-freeze/editing changes
 - Acrobat-familiar shortcut profile has a dedicated static audit, including text-input focus guards.
 - Inserted text deletion is covered by the native interaction smoke test.
 - Dialog/action references are audited so menu commands cannot silently point to missing dialog IDs.

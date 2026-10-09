@@ -22,7 +22,8 @@ ApplicationWindow {
     // expensive PDF renders and freeze the UI.
     property real renderZoom: 0.74
     property string tool: "select"
-    property bool pdfFocusMode: false
+    property bool pdfFullScreenMode: false
+    property int visibilityBeforePdfFullScreen: Window.Windowed
     property string selectedText: ""
     property var selectedTextRects: []
     property int selectedTextPage: -1
@@ -41,6 +42,10 @@ ApplicationWindow {
     property int drawOpacity: 100
     property color highlightColor: "#ffd54f"
     property int highlightOpacity: 42
+    property real highlightPenWidth: 18.0
+    readonly property var highlightColors: ["#fff176", "#ffb74d", "#81c784", "#64b5f6", "#ba68c8", "#f48fb1", "#4dd0e1"]
+    property var customHighlightColors: []
+    readonly property var availableHighlightColors: highlightColors.concat(customHighlightColors)
     property bool syncingPageFromScroll: false
     property bool homeVisible: true
     property bool allowWindowClose: false
@@ -104,6 +109,20 @@ ApplicationWindow {
                 converted.push(typeof args[i] === "number" ? i18n.number(args[i]) : args[i])
         }
         return tx(key, converted)
+    }
+
+    function addCustomHighlightColor(value) {
+        var normalized = value.toString().toLowerCase()
+        var colors = customHighlightColors.slice(0)
+        for (var i = 0; i < colors.length; ++i) {
+            if (colors[i].toLowerCase() === normalized) {
+                highlightColor = colors[i]
+                return
+            }
+        }
+        colors.push(normalized)
+        customHighlightColors = colors
+        highlightColor = normalized
     }
 
     function showToast(key, args) {
@@ -179,6 +198,23 @@ ApplicationWindow {
         }
     }
 
+    function setPdfFullScreen(enabled) {
+        if (enabled === pdfFullScreenMode)
+            return
+        if (enabled) {
+            visibilityBeforePdfFullScreen = win.visibility
+            homeVisible = false
+            pdfFullScreenMode = true
+            win.showFullScreen()
+        } else {
+            pdfFullScreenMode = false
+            if (visibilityBeforePdfFullScreen === Window.Maximized)
+                win.showMaximized()
+            else
+                win.showNormal()
+        }
+    }
+
     function keyboardTextInputActive() {
         var item = win.activeFocusItem
         return item && typeof item.cursorPosition !== "undefined"
@@ -245,6 +281,7 @@ ApplicationWindow {
         if (tool === "hand") return tx("tool.hand_hint")
         if (tool === "text") return tx("tool.text_hint")
         if (tool === "highlight") return tx("tool.highlight_hint")
+        if (tool === "highlightPen") return tx("tool.highlight_pen_hint")
         if (tool === "draw") return tx("tool.draw_hint")
         if (tool === "redact") return tx("tool.redact_hint")
         if (tool === "crop") return tx("tool.crop_hint")
@@ -651,7 +688,7 @@ ApplicationWindow {
         property real ny: 0.2
         ColumnLayout {
             anchors.fill: parent
-            TextField { id: textInput; placeholderText: tx("dialog.enter_text"); Layout.preferredWidth: 380 }
+            TextArea { id: textInput; placeholderText: tx("dialog.enter_text"); Layout.preferredWidth: 420; Layout.preferredHeight: 90; wrapMode: TextEdit.Wrap; selectByMouse: true }
             RowLayout {
                 Label { text: tx("dialog.size") }
                 SpinBox { id: fontSize; from: 8; to: 96; value: 18 }
@@ -1207,7 +1244,7 @@ ApplicationWindow {
                         ["Ctrl+=", tx("action.zoom_in")], ["Ctrl+-", tx("action.zoom_out")], ["Ctrl+0", tx("action.fit_page")], ["Ctrl+1", tx("action.actual_size")], ["Ctrl+2", tx("action.fit_width")],
                         ["Ctrl+L", tx("action.full_screen")], ["Ctrl+K", tx("action.preferences")], ["Ctrl+Shift+P", tx("action.command_palette")], ["Ctrl+Shift+N", tx("action.go_to_page")],
                         ["Ctrl+Shift+D", tx("action.delete_page")], ["Ctrl+Shift+T", tx("action.add_blank")], ["Ctrl+Shift+I", tx("action.combine")], ["Ctrl+W", tx("action.close_tab")], ["Ctrl+Tab / Ctrl+Shift+Tab", tx("action.next_previous_tab")], ["F4", tx("action.sidebar")],
-                        ["V", tx("action.pointer")], ["H", tx("action.hand")], ["T", tx("action.edit_text")], ["U", tx("action.highlight")], ["D", tx("action.draw")], ["C", tx("action.crop")], ["Shift+Y", tx("action.redact")],
+                        ["V", tx("action.pointer")], ["H", tx("action.hand")], ["T", tx("action.edit_text")], ["U", tx("action.highlight")], ["Shift+U", tx("action.highlight_pen")], ["D", tx("action.draw")], ["C", tx("action.crop")], ["Shift+Y", tx("action.redact")],
                         ["Page Up / Page Down", tx("action.scroll_screen")], ["Ctrl+Page Up / Ctrl+Page Down", tx("action.previous_next_page")], ["Home / End", tx("action.first_last_page")],
                         ["Delete / Backspace", tx("action.delete_selected_object")]
                     ]
@@ -1284,7 +1321,7 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+0"; onActivated: fitPage() }
     Shortcut { sequence: "Ctrl+1"; onActivated: setZoom(1.0) }
     Shortcut { sequence: "Ctrl+2"; onActivated: fitWidth() }
-    Shortcut { sequence: "Ctrl+L"; onActivated: pdfFocusMode = !pdfFocusMode }
+    Shortcut { sequence: "Ctrl+L"; onActivated: setPdfFullScreen(!pdfFullScreenMode) }
     Shortcut { sequence: "Ctrl+K"; onActivated: preferencesDlg.open() }
     Shortcut { sequence: "Ctrl+Shift+P"; onActivated: commandDlg.open() }
     Shortcut { sequence: "Ctrl+Shift+N"; onActivated: goToPageDlg.open() }
@@ -1304,12 +1341,13 @@ ApplicationWindow {
     Shortcut { sequence: "Left"; enabled: !keyboardTextInputActive(); onActivated: navigateToPage(pdfDocument.currentPage - 1) }
     Shortcut { sequence: "Home"; enabled: !keyboardTextInputActive(); onActivated: navigateToPage(0) }
     Shortcut { sequence: "End"; enabled: !keyboardTextInputActive(); onActivated: navigateToPage(pdfDocument.pageCount - 1) }
-    Shortcut { sequence: "Escape"; enabled: !keyboardTextInputActive(); onActivated: { if (pdfFocusMode) { pdfFocusMode = false } else { cancelPendingAction(); clearTextSelection(); clearOverlaySelection(); chooseTool("select") } } }
+    Shortcut { sequence: "Escape"; enabled: !keyboardTextInputActive(); onActivated: { if (pdfFullScreenMode) { setPdfFullScreen(false) } else { cancelPendingAction(); clearTextSelection(); clearOverlaySelection(); chooseTool("select") } } }
 
     Shortcut { sequence: "V"; enabled: canUseSingleKeyShortcut(); onActivated: chooseTool("select") }
     Shortcut { sequence: "H"; enabled: canUseSingleKeyShortcut(); onActivated: chooseTool("hand") }
     Shortcut { sequence: "T"; enabled: canUseSingleKeyShortcut() && !pdfDocument.locked; onActivated: chooseTool("text") }
     Shortcut { sequence: "U"; enabled: canUseSingleKeyShortcut() && !pdfDocument.locked; onActivated: chooseTool("highlight") }
+    Shortcut { sequence: "Shift+U"; enabled: canUseSingleKeyShortcut() && !pdfDocument.locked; onActivated: chooseTool("highlightPen") }
     Shortcut { sequence: "D"; enabled: canUseSingleKeyShortcut() && !pdfDocument.locked; onActivated: chooseTool("draw") }
     Shortcut { sequence: "C"; enabled: canUseSingleKeyShortcut() && !pdfDocument.locked; onActivated: chooseTool("crop") }
     Shortcut { sequence: "Shift+Y"; enabled: canUseSingleKeyShortcut() && !pdfDocument.locked; onActivated: chooseTool("redact") }
@@ -1327,7 +1365,7 @@ ApplicationWindow {
     }
 
     menuBar: MenuBar {
-        visible: !pdfFocusMode
+        visible: !pdfFullScreenMode
         Menu {
             title: tx("menu.file")
             Action { text: tx("action.home"); onTriggered: homeVisible = true }
@@ -1378,7 +1416,7 @@ ApplicationWindow {
             Action { text: tx("action.go_to_page"); onTriggered: goToPageDlg.open() }
             MenuSeparator {}
             Action { text: tx("action.sidebar"); checkable: true; checked: showSidebar; onTriggered: showSidebar = checked }
-            Action { text: tx("action.full_screen"); checkable: true; checked: pdfFocusMode; onTriggered: pdfFocusMode = checked }
+            Action { text: tx("action.full_screen"); checkable: true; checked: pdfFullScreenMode; onTriggered: setPdfFullScreen(checked) }
             MenuSeparator {}
             Action { text: tx("action.dark_mode"); checkable: true; checked: appSettings.darkMode; onTriggered: appSettings.darkMode = checked }
             Action { text: tx("action.adaptive_performance"); checkable: true; checked: appSettings.adaptivePerformance; onTriggered: appSettings.adaptivePerformance = checked }
@@ -1424,6 +1462,7 @@ ApplicationWindow {
             Action { text: tx("action.hand"); onTriggered: chooseTool("hand") }
             Action { text: tx("action.edit_text"); enabled: !pdfDocument.locked; onTriggered: chooseTool("text") }
             Action { text: tx("action.highlight"); enabled: !pdfDocument.locked; onTriggered: chooseTool("highlight") }
+            Action { text: tx("action.highlight_pen"); enabled: !pdfDocument.locked; onTriggered: chooseTool("highlightPen") }
             Action { text: tx("action.draw"); enabled: !pdfDocument.locked; onTriggered: chooseTool("draw") }
             Action { text: tx("action.insert_image"); enabled: !pdfDocument.locked; onTriggered: imageDlg.open() }
             Action { text: tx("action.signature"); enabled: !pdfDocument.locked; onTriggered: signatureDlg.open() }
@@ -1497,7 +1536,7 @@ ApplicationWindow {
     }
 
     header: Rectangle {
-        visible: !pdfFocusMode
+        visible: !pdfFullScreenMode
         height: visible ? 154 : 0
         color: panelColor
         gradient: Gradient {
@@ -1646,6 +1685,12 @@ ApplicationWindow {
                         background: Rectangle { radius: 8; color: highlightToolButton.checked ? highlightToolColor : (highlightToolButton.hovered ? (appSettings.darkMode ? "#4b3719" : "#fff4d6") : "transparent"); border.color: highlightToolButton.checked ? highlightToolColor : borderColor }
                     }
                     Button {
+                        id: highlightPenToolButton
+                        text: tx("action.highlight_pen"); checkable: true; checked: tool === "highlightPen"; enabled: !pdfDocument.locked; onClicked: chooseTool("highlightPen")
+                        palette.buttonText: checked ? "#172033" : textColor
+                        background: Rectangle { radius: 8; color: highlightPenToolButton.checked ? highlightColor : (highlightPenToolButton.hovered ? (appSettings.darkMode ? "#4b3719" : "#fff8dc") : "transparent"); border.color: highlightPenToolButton.checked ? highlightColor : borderColor }
+                    }
+                    Button {
                         id: drawToolButton
                         text: tx("action.draw"); checkable: true; checked: tool === "draw"; enabled: !pdfDocument.locked; onClicked: chooseTool("draw")
                         palette.buttonText: checked ? "white" : textColor
@@ -1667,7 +1712,7 @@ ApplicationWindow {
                     Rectangle { width: 1; height: 30; color: borderColor }
                     Label {
                         text: toolHint()
-                        color: tool === "redact" ? redactToolColor : tool === "crop" ? cropToolColor : tool === "draw" ? drawToolColor : tool === "highlight" ? highlightToolColor : tool === "text" ? textToolColor : tool === "hand" ? accentCyan : pointerColor
+                        color: tool === "redact" ? redactToolColor : tool === "crop" ? cropToolColor : tool === "draw" ? drawToolColor : (tool === "highlight" || tool === "highlightPen") ? highlightToolColor : tool === "text" ? textToolColor : tool === "hand" ? accentCyan : pointerColor
                         font.pixelSize: 11
                         Layout.maximumWidth: 215
                         elide: Text.ElideRight
@@ -1700,6 +1745,34 @@ ApplicationWindow {
                     Button { visible: pendingActionPage >= 0; text: tx("dialog.cancel"); onClicked: cancelPendingAction() }
 
                     RowLayout {
+                        visible: tool === "highlight" || tool === "highlightPen"
+                        spacing: 4
+                        Label { text: tx("tool.highlight_color"); color: mutedColor; font.pixelSize: 10 }
+                        Repeater {
+                            model: availableHighlightColors
+                            delegate: Rectangle {
+                                required property string modelData
+                                width: 19; height: 19; radius: 9.5
+                                color: modelData
+                                border.width: highlightColor.toString().toLowerCase() === modelData.toLowerCase() ? 3 : 1
+                                border.color: highlightColor.toString().toLowerCase() === modelData.toLowerCase() ? "white" : borderColor
+                                TapHandler { onTapped: highlightColor = modelData }
+                            }
+                        }
+                        Button {
+                            text: "+"
+                            width: 24; height: 24
+                            font.bold: true
+                            ToolTip.visible: hovered
+                            ToolTip.text: tx("tool.more_colors")
+                            onClicked: highlightColorDialog.open()
+                        }
+                        Label { text: tx("tool.opacity"); color: mutedColor; font.pixelSize: 10 }
+                        Slider { from: 15; to: 75; stepSize: 1; value: highlightOpacity; Layout.preferredWidth: 72; onMoved: highlightOpacity = Math.round(value) }
+                        Slider { visible: tool === "highlightPen"; from: 8; to: 34; stepSize: 1; value: highlightPenWidth; Layout.preferredWidth: 72; onMoved: highlightPenWidth = value }
+                    }
+
+                    RowLayout {
                         visible: tool === "draw"
                         spacing: 4
                         Label { text: tx("tool.brush"); color: mutedColor; font.pixelSize: 10 }
@@ -1718,8 +1791,14 @@ ApplicationWindow {
         }
     }
 
+    ColorDialog {
+        id: highlightColorDialog
+        title: tx("tool.more_colors")
+        onAccepted: addCustomHighlightColor(selectedColor)
+    }
+
     footer: Rectangle {
-        visible: !pdfFocusMode
+        visible: !pdfFullScreenMode
         height: visible ? 32 : 0
         color: panelColor
         border.color: borderColor
@@ -1823,7 +1902,7 @@ ApplicationWindow {
             orientation: Qt.Horizontal
 
             Rectangle {
-                visible: showSidebar && !pdfFocusMode
+                visible: showSidebar && !pdfFullScreenMode
                 SplitView.preferredWidth: visible ? 238 : 0
                 SplitView.minimumWidth: visible ? 170 : 0
                 color: subPanelColor
@@ -1885,19 +1964,6 @@ ApplicationWindow {
                 gradient: Gradient {
                     GradientStop { position: 0.0; color: appSettings.darkMode ? "#0b1020" : "#e8edf5" }
                     GradientStop { position: 1.0; color: appSettings.darkMode ? "#111827" : "#d7deea" }
-                }
-
-                Button {
-                    visible: pdfFocusMode
-                    z: 500
-                    anchors.top: parent.top
-                    anchors.right: parent.right
-                    anchors.margins: 12
-                    text: tx("action.exit_focus_mode") + "  Esc"
-                    font.bold: true
-                    palette.buttonText: "white"
-                    background: Rectangle { radius: 12; color: "#cc172033"; border.color: accentCyan }
-                    onClicked: pdfFocusMode = false
                 }
 
                 ListView {
@@ -2184,7 +2250,7 @@ ApplicationWindow {
                             Canvas {
                                 id: liveInk
                                 anchors.fill: parent
-                                visible: pageDelegate.drawingInk && tool === "draw"
+                                visible: pageDelegate.drawingInk && (tool === "draw" || tool === "highlightPen")
                                 renderStrategy: Canvas.Threaded
                                 onPaint: {
                                     var ctx = getContext("2d")
@@ -2200,9 +2266,9 @@ ApplicationWindow {
                                     if (start + 3 >= pts.length)
                                         return
                                     ctx.beginPath()
-                                    ctx.strokeStyle = drawColor.toString()
-                                    ctx.globalAlpha = drawOpacity / 100.0
-                                    ctx.lineWidth = drawWidth
+                                    ctx.strokeStyle = tool === "highlightPen" ? highlightColor.toString() : drawColor.toString()
+                                    ctx.globalAlpha = (tool === "highlightPen" ? highlightOpacity : drawOpacity) / 100.0
+                                    ctx.lineWidth = tool === "highlightPen" ? highlightPenWidth : drawWidth
                                     ctx.lineCap = "round"
                                     ctx.lineJoin = "round"
                                     ctx.moveTo(pts[start] * width, pts[start + 1] * height)
@@ -2223,7 +2289,7 @@ ApplicationWindow {
                                 height: Math.abs(interactionArea.mouseY - pageDelegate.pressY)
                                 color: tool === "redact" ? "#33dc2626" : tool === "crop" ? "#22059669" : tool === "highlight" ? "#33f59e0b" : "#263b82f6"
                                 border.width: 2
-                                border.color: tool === "redact" ? redactToolColor : tool === "crop" ? cropToolColor : tool === "highlight" ? highlightToolColor : pointerColor
+                                border.color: tool === "redact" ? redactToolColor : tool === "crop" ? cropToolColor : (tool === "highlight" || tool === "highlightPen") ? highlightToolColor : pointerColor
                             }
 
                             Rectangle {
@@ -2283,7 +2349,7 @@ ApplicationWindow {
                                 preventStealing: true
                                 cursorShape: tool === "hand" ? (pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor)
                                            : tool === "text" ? Qt.IBeamCursor
-                                           : tool === "draw" || tool === "redact" || tool === "crop" || tool === "highlight" || tool === "formText" || tool === "formCheckbox" || tool === "formRadio" || tool === "formDropdown" ? Qt.CrossCursor
+                                           : tool === "draw" || tool === "highlightPen" || tool === "redact" || tool === "crop" || tool === "highlight" || tool === "formText" || tool === "formCheckbox" || tool === "formRadio" || tool === "formDropdown" ? Qt.CrossCursor
                                            : tool === "formFill" ? Qt.PointingHandCursor : Qt.IBeamCursor
 
                                 onPressed: function(mouse) {
@@ -2316,7 +2382,7 @@ ApplicationWindow {
                                         textDlg.nx = mouse.x / Math.max(1, width)
                                         textDlg.ny = mouse.y / Math.max(1, height)
                                         textDlg.open()
-                                    } else if (tool === "draw") {
+                                    } else if (tool === "draw" || tool === "highlightPen") {
                                         pageDelegate.localInkPoints = [mouse.x / Math.max(1, width), mouse.y / Math.max(1, height)]
                                         pageDelegate.paintedInkPoints = 0
                                         pageDelegate.clearInkCanvas = true
@@ -2333,7 +2399,7 @@ ApplicationWindow {
                                         var maxY = Math.max(0, documentView.contentHeight - documentView.height)
                                         documentView.contentX = Math.max(0, Math.min(maxX, pageDelegate.handStartContentX - dxPan))
                                         documentView.contentY = Math.max(0, Math.min(maxY, pageDelegate.handStartContentY - dyPan))
-                                    } else if (pressed && tool === "draw" && pageDelegate.drawingInk) {
+                                    } else if (pressed && (tool === "draw" || tool === "highlightPen") && pageDelegate.drawingInk) {
                                         var pts = pageDelegate.localInkPoints
                                         var nx = mouse.x / Math.max(1, width)
                                         var ny = mouse.y / Math.max(1, height)
@@ -2353,9 +2419,13 @@ ApplicationWindow {
                                 onReleased: function(mouse) {
                                     if (tool === "hand") {
                                         return
-                                    } else if (tool === "draw") {
-                                        if (pageDelegate.localInkPoints.length >= 4)
-                                            pdfDocument.addInkStyled(index, pageDelegate.localInkPoints, drawColor.toString(), Math.max(0.0006, drawWidth / Math.max(1, pageSurface.width)), drawOpacity)
+                                    } else if (tool === "draw" || tool === "highlightPen") {
+                                        if (pageDelegate.localInkPoints.length >= 4) {
+                                            if (tool === "highlightPen")
+                                                pdfDocument.addHighlightInkStyled(index, pageDelegate.localInkPoints, highlightColor.toString(), Math.max(0.0015, highlightPenWidth / Math.max(1, pageSurface.width)), highlightOpacity)
+                                            else
+                                                pdfDocument.addInkStyled(index, pageDelegate.localInkPoints, drawColor.toString(), Math.max(0.0006, drawWidth / Math.max(1, pageSurface.width)), drawOpacity)
+                                        }
                                         pageDelegate.localInkPoints = []
                                         pageDelegate.drawingInk = false
                                         pageDelegate.paintedInkPoints = 0
@@ -2417,7 +2487,7 @@ ApplicationWindow {
             }
 
             Rectangle {
-                visible: !pdfFocusMode
+                visible: !pdfFullScreenMode
                 SplitView.preferredWidth: visible ? 285 : 0
                 SplitView.minimumWidth: visible ? 225 : 0
                 color: panelColor

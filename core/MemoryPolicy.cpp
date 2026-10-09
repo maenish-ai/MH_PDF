@@ -118,16 +118,9 @@ int MemoryPolicy::overlayMaxDimension() {
 }
 
 int MemoryPolicy::undoLimit() {
-    const bool lowMemory = effectiveLowMemoryMode();
-    const qint64 memory = ramMB();
-#ifdef Q_OS_ANDROID
-    if (lowMemory || memory <= 4096) return 5;
-    if (memory <= 8192) return 8;
-    return 10;
-#else
-    if (lowMemory || memory <= 4096) return 6;
-    if (memory <= 8192) return 10;
-    if (memory <= 16384) return 16;
-    return 20;
-#endif
+    // QUndoStack uses 0 for unlimited history. MaenPDF keeps common editing
+    // commands lightweight (vector data or touched image patches) so users are
+    // not arbitrarily capped at 5/10/20 Undo steps. Heavy page snapshots still
+    // benefit from the adaptive render/cache limits elsewhere in MemoryPolicy.
+    return 0;
 }

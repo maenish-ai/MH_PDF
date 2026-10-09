@@ -45,12 +45,12 @@ This matrix records ideas worth adopting without copying proprietary code or UI.
 
 Disabled UI items must stay disabled until these are genuinely implemented and regression-tested.
 
-## 7.4.1 interaction and zero-freeze additions
+## 7.5.0 highlight, Unicode and full-screen additions
 - Debounced visual zoom with delayed high-quality render commit.
 - Page-local invalidation: editing one page does not force every visible page image to reload.
 - Smaller adaptive prefetch windows for 4–6 GB systems.
 - Text overlays: move, resize, edit, delete, partial strikeout, Undo/Redo.
 - Local forms: text fields, checkboxes, radio buttons, dropdowns, fill mode, Undo/Redo, recovery persistence, flatten-on-save interoperability.
-- PDF Focus Mode hides MaenPDF chrome instead of forcing the operating-system window fullscreen.
+- PDF Full Screen Mode uses true operating-system fullscreen and hides all MaenPDF chrome so only the document remains visible.
 - Dark mode keeps PDF paper and thumbnail paper white.
 - Highlight, redaction and drawing undo history stores touched patches instead of full-page overlay images where possible.

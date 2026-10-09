@@ -1,4 +1,4 @@
-# GitHub and Store Release Guide — MaenPDF 7.4.1
+# GitHub and Store Release Guide — MaenPDF 7.5.0
 
 ## Repository layout
 Upload the **contents** of the MaenPDF folder to the repository root, including `.github/`.
@@ -16,8 +16,8 @@ The build jobs depend on the audit job, so packaging cannot start when a release
 
 ## Stable Android identity
 - Package ID: `org.orbispdf.app`
-- versionName: `7.4.1`
-- versionCode: `70401`
+- versionName: `7.5.0`
+- versionCode: `70500`
 - minSdk: 28
 - target/compile SDK: 36
 

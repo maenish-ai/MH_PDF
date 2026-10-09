@@ -77,7 +77,7 @@ int main(int argc, char *argv[])
     QGuiApplication::setOrganizationName(QStringLiteral("MaenPDF"));
     QGuiApplication::setOrganizationDomain(QStringLiteral("maenpdf.local"));
     QGuiApplication::setApplicationName(QStringLiteral("MaenPDF"));
-    QGuiApplication::setApplicationVersion(QStringLiteral("7.4.1"));
+    QGuiApplication::setApplicationVersion(QStringLiteral("7.5.0"));
     AppLogger::install();
 
     // Bound image decoder allocations before any user-controlled image is
@@ -121,7 +121,7 @@ int main(int argc, char *argv[])
     QDir::setCurrent(QCoreApplication::applicationDirPath());
 
     AppLogger::write(QStringLiteral("INFO"),
-                     QStringLiteral("MaenPDF 7.4.1 startup; Qt %1; appDir=%2; cwd=%3; QT_QUICK_BACKEND=%4")
+                     QStringLiteral("MaenPDF 7.5.0 startup; Qt %1; appDir=%2; cwd=%3; QT_QUICK_BACKEND=%4")
                          .arg(QString::fromLatin1(qVersion()),
                               QCoreApplication::applicationDirPath(),
                               QDir::currentPath(),
@@ -230,6 +230,8 @@ int main(int argc, char *argv[])
 
             document->addInkStyled(0, QVariantList{0.15, 0.20, 0.30, 0.24, 0.45, 0.21},
                                    QStringLiteral("#2563EB"), 0.004, 100);
+            document->addHighlightInkStyled(0, QVariantList{0.18, 0.27, 0.32, 0.28, 0.48, 0.27},
+                                            QStringLiteral("#81C784"), 0.018, 34);
             document->addRedaction(1, 0.12, 0.12, 0.22, 0.08);
             document->cropPage(2, 0.05, 0.05, 0.90, 0.90);
             document->setCurrentPage(2);

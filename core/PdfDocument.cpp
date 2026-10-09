@@ -106,6 +106,21 @@ QImage decodeRecoveryImage(const QString &value) {
     image.loadFromData(QByteArray::fromBase64(value.toLatin1()), "PNG");
     return image;
 }
+
+QString normalizeEditableUnicode(const QString &text) {
+    // Compatibility normalization converts Arabic Presentation Forms and other
+    // compatibility glyph code points to editable Unicode text while retaining
+    // Arabic/English letters, combining marks and bidi content in QString.
+    return text.normalized(QString::NormalizationForm_KC);
+}
+
+QSizeF measuredEditableText(const QString &text, const QFontMetricsF &metrics) {
+    const QStringList lines = text.split(QLatin1Char('\n'), Qt::KeepEmptyParts);
+    qreal width = 0.0;
+    for (const QString &line : lines)
+        width = qMax(width, metrics.horizontalAdvance(line.isEmpty() ? QStringLiteral(" ") : line));
+    return QSizeF(width, metrics.height() * qMax(1, lines.size()));
+}
 }
 
 PdfDocument::PdfDocument(QObject *parent) : QObject(parent) {
@@ -1180,7 +1195,7 @@ QString PdfDocument::addText(int pageIndex, double x, double y, const QString &t
 
     TextOverlayItem item;
     item.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    item.text = text;
+    item.text = normalizeEditableUnicode(text);
     item.x = qBound(0.0, x, 0.98);
     item.y = qBound(0.02, y, 1.0);
     item.fontSize = qBound(8, fontSize, 144);
@@ -1189,10 +1204,11 @@ QString PdfDocument::addText(int pageIndex, double x, double y, const QString &t
     QFont metricsFont;
     metricsFont.setPixelSize(item.fontSize);
     const QFontMetricsF metrics(metricsFont);
+    const QSizeF measured = measuredEditableText(item.text, metrics);
     const qreal pageWidth = qMax<qreal>(1.0, page->points.width());
     const qreal pageHeight = qMax<qreal>(1.0, page->points.height());
-    item.width = qBound(0.015, metrics.horizontalAdvance(item.text) / pageWidth, 0.98 - item.x);
-    item.height = qBound(0.012, metrics.height() / pageHeight, qMin(0.20, item.y));
+    item.width = qBound(0.015, measured.width() / pageWidth, 0.98 - item.x);
+    item.height = qBound(0.012, measured.height() / pageHeight, qMin(0.40, item.y));
 
     const int at = page->textItems.size();
     page->textItems.push_back(item);
@@ -1283,7 +1299,7 @@ bool PdfDocument::updateTextAnnotation(int pageIndex, const QString &id, const Q
 
     const TextOverlayItem before = page->textItems[at];
     TextOverlayItem after = before;
-    after.text = text;
+    after.text = normalizeEditableUnicode(text);
     after.x = qBound(0.0, x, 0.98);
     after.fontSize = qBound(8, fontSize, 144);
     const int textSize = int(after.text.size());
@@ -1293,10 +1309,11 @@ bool PdfDocument::updateTextAnnotation(int pageIndex, const QString &id, const Q
     QFont metricsFont;
     metricsFont.setPixelSize(after.fontSize);
     const QFontMetricsF metrics(metricsFont);
+    const QSizeF measured = measuredEditableText(after.text, metrics);
     const qreal pageWidth = qMax<qreal>(1.0, page->points.width());
     const qreal pageHeight = qMax<qreal>(1.0, page->points.height());
-    after.width = qBound(0.015, metrics.horizontalAdvance(after.text) / pageWidth, qMax(0.015, 0.98 - after.x));
-    after.height = qBound(0.012, metrics.height() / pageHeight, 0.20);
+    after.width = qBound(0.015, measured.width() / pageWidth, qMax(0.015, 0.98 - after.x));
+    after.height = qBound(0.012, measured.height() / pageHeight, 0.40);
     // QML supplies the top edge while the renderer stores a baseline.
     after.y = qBound(after.height, y + after.height, 1.0);
 
@@ -1420,7 +1437,7 @@ bool PdfDocument::updateFormField(int pageIndex, const QString &id, const QStrin
     if (at < 0) return false;
     const FormOverlayItem before = page->formItems[at];
     FormOverlayItem after = before;
-    after.value = value;
+    after.value = normalizeEditableUnicode(value);
     after.checked = checked;
     if (!after.options.isEmpty()) {
         after.selectedIndex = qBound(0, selectedIndex, int(after.options.size()) - 1);
@@ -1644,6 +1661,14 @@ void PdfDocument::cropPage(int pageIndex, double x, double y, double width, doub
 
 void PdfDocument::addInk(int pageIndex, const QVariantList &points) {
     addInkStyled(pageIndex, points, QStringLiteral("#185EB4"), 0.004, 100);
+}
+
+void PdfDocument::addHighlightInkStyled(int pageIndex, const QVariantList &points, const QString &color,
+                                        double widthRatio, int opacity) {
+    // Freehand highlighter deliberately reuses the lightweight touched-patch
+    // stroke engine: it stays fast on 4 GB devices while supporting unlimited
+    // Undo history without page-sized bitmap snapshots per stroke.
+    addInkStyled(pageIndex, points, color, widthRatio, qBound(10, opacity, 80));
 }
 
 void PdfDocument::addInkStyled(int pageIndex, const QVariantList &points, const QString &color,

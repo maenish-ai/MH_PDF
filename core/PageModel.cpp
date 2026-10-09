@@ -7,6 +7,7 @@
 #include <QFontMetricsF>
 #include <QMutexLocker>
 #include <QTransform>
+#include <QTextOption>
 #include <QUuid>
 #include <utility>
 
@@ -253,19 +254,33 @@ QImage PageModel::renderPage(int row, const QSize &requestedSize) const {
         if (!color.isValid())
             color = QColor(QStringLiteral("#111827"));
         painter.setPen(color);
-        const QPointF baseline(item.x * base.width(), item.y * base.height());
-        painter.drawText(baseline, item.text);
+        // QString/QTextOption keep the inserted text fully Unicode. Using a
+        // directional text rectangle (instead of a raw baseline draw) lets Qt
+        // shape Arabic joining forms, bidi runs, Latin text and mixed Arabic /
+        // English content consistently while preserving copy/edit code points.
+        const bool rtlText = item.text.isRightToLeft();
+        const qreal left = item.x * base.width();
+        const qreal top = qMax<qreal>(0.0, (item.y - item.height) * base.height());
+        const qreal width = qMax<qreal>(2.0, item.width * base.width());
+        const qreal height = qMax<qreal>(2.0, item.height * base.height());
+        const QRectF textRect(left, top, width, height);
+        QTextOption option;
+        option.setWrapMode(QTextOption::NoWrap);
+        option.setTextDirection(rtlText ? Qt::RightToLeft : Qt::LeftToRight);
+        option.setAlignment((rtlText ? Qt::AlignRight : Qt::AlignLeft) | Qt::AlignVCenter);
+        painter.drawText(textRect, item.text, option);
         if (item.strikeStart >= 0 && item.strikeLength > 0 && item.strikeStart < item.text.size()) {
             const int start = qBound(0, item.strikeStart, int(item.text.size()));
             const int length = qBound(0, item.strikeLength, int(item.text.size()) - start);
             const QFontMetricsF metrics(font);
             const qreal prefix = metrics.horizontalAdvance(item.text.left(start));
             const qreal strikeWidth = metrics.horizontalAdvance(item.text.mid(start, length));
-            const qreal strikeY = baseline.y() - metrics.xHeight() * 0.42;
+            const qreal strikeY = textRect.top() + textRect.height() * 0.52;
+            const qreal strikeX = rtlText ? textRect.right() - prefix - strikeWidth : textRect.left() + prefix;
             QPen strikePen(color, qMax<qreal>(1.0, scale * 1.2));
             painter.setPen(strikePen);
-            painter.drawLine(QPointF(baseline.x() + prefix, strikeY),
-                             QPointF(baseline.x() + prefix + strikeWidth, strikeY));
+            painter.drawLine(QPointF(strikeX, strikeY),
+                             QPointF(strikeX + strikeWidth, strikeY));
         }
     }
 
@@ -304,7 +319,11 @@ QImage PageModel::renderPage(int row, const QSize &requestedSize) const {
         } else {
             QString shown = form.value;
             if (shown.isEmpty()) shown = form.type == QStringLiteral("dropdown") ? QStringLiteral("Select") : QStringLiteral("Text field");
-            painter.drawText(box.adjusted(6, 1, -6, -1), Qt::AlignVCenter | Qt::AlignLeft, shown);
+            QTextOption formOption;
+            const bool rtlValue = shown.isRightToLeft();
+            formOption.setTextDirection(rtlValue ? Qt::RightToLeft : Qt::LeftToRight);
+            formOption.setAlignment((rtlValue ? Qt::AlignRight : Qt::AlignLeft) | Qt::AlignVCenter);
+            painter.drawText(box.adjusted(6, 1, form.type == QStringLiteral("dropdown") ? -18 : -6, -1), shown, formOption);
             if (form.type == QStringLiteral("dropdown"))
                 painter.drawText(box.adjusted(4, 1, -6, -1), Qt::AlignVCenter | Qt::AlignRight, QStringLiteral("▾"));
         }

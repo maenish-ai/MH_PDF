@@ -1,4 +1,4 @@
-# MaenPDF 7.4.1 Keyboard Shortcuts
+# MaenPDF 7.5.0 Keyboard Shortcuts
 
 MaenPDF uses an **Acrobat-familiar** shortcut profile so people coming from Adobe Acrobat do not need to relearn common PDF navigation and tool commands. Standard Windows shortcuts are preserved where possible. Single-key tool shortcuts can be turned off in **Preferences**.
 
@@ -31,7 +31,7 @@ Delete and Backspace are deliberately disabled while typing in a text field, so 
 | Ctrl+0 | Fit page |
 | Ctrl+1 | Actual size (100%) |
 | Ctrl+2 | Fit width |
-| Ctrl+L | PDF Focus Mode (hide application chrome; keep the desktop window normal) |
+| Ctrl+L | PDF Full Screen Mode (document only; no menus or sidebars) |
 | Ctrl+Shift+N | Go to page |
 | Ctrl+Tab / Ctrl+Shift+Tab | Next / previous document tab |
 | F4 | Show/hide Pages sidebar |
@@ -49,7 +49,8 @@ Delete and Backspace are deliberately disabled while typing in a text field, so 
 | V | Pointer / Select |
 | H | Hand / Pan |
 | T | Insert text |
-| U | Highlight |
+| U | Highlight selected text/area |
+| Shift+U | Highlight Pen (freehand) |
 | D | Draw |
 | C | Crop |
 | Shift+Y | Redact |

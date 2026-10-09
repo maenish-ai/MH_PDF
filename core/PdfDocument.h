@@ -82,6 +82,7 @@ public:
     Q_INVOKABLE void cropPage(int page, double x, double y, double w, double h);
     Q_INVOKABLE void addInk(int page, const QVariantList &points);
     Q_INVOKABLE void addInkStyled(int page, const QVariantList &points, const QString &color, double widthRatio, int opacity = 100);
+    Q_INVOKABLE void addHighlightInkStyled(int page, const QVariantList &points, const QString &color, double widthRatio, int opacity = 34);
     Q_INVOKABLE void addWatermark(const QString &text, int fontSize = 42, int opacity = 45);
     Q_INVOKABLE void addPageNumbers();
     Q_INVOKABLE void addBatesNumbers(const QString &prefix, int start = 1, int padding = 6);
