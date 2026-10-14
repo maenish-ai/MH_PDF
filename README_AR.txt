@@ -1,8 +1,9 @@
-MaenPDF — تصحيح تنزيل ملفات PDF وإشعار التحديث
-1. فك الضغط.
-2. شغّل: python apply_fixes.py PATH_TO_MH_PDF
-3. ارفع ui/Main.qml و ui/PdfImportDialog.qml إلى GitHub.
-4. اختبر GitHub Actions.
-Download All ينزّل الملفات المكتشفة واحدًا تلو الآخر ويتجاوز الملف الفاشل.
-تظهر رسالة أن حزمة التحديث جاهزة للتثبيت مع طلب إعادة فتح البرنامج.
-تنزيل التحديث ليس تثبيتًا؛ التثبيت التلقائي الصامت غير منفذ في هذه الحزمة.
+هذا تصحيح الشارة الحمراء في GitHub Actions.
+فشل فحص الترجمة بسبب Download completed.
+شغّل داخل مجلد المشروع بعد فك الضغط:
+python fix.py /path/to/MH_PDF
+ثم ارفع الملفات الثلاثة التي تغيرت في commit واحد:
+ui/PdfImportDialog.qml
+i18n/en.json
+i18n/ar.json
+هذا ليس Setup ولا APK. سيعيد GitHub Actions البناء بعد رفع التعديلات.
