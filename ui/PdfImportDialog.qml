@@ -20,6 +20,28 @@ Dialog {
     property int failedCount: 0
     property var failures: []
     property bool suppressAutoOpen: false
+    property int selectedIndex: -1
+    property bool resetting: false
+
+    function resetDialog() {
+        // Invalidate the queue before aborting the network request.
+        batchActive = false
+        queue = []
+        queueIndex = 0
+        succeeded = 0
+        failedCount = 0
+        failures = []
+        selectedIndex = -1
+        suppressAutoOpen = true
+        resetting = true
+        batchSummary.close()
+        errorDialog.close()
+        importer.resetUi()
+        address.text = ""
+        candidates = []
+        resetting = false
+    }
+
 
     function beginAll() {
         if (importer.busy || candidates.length === 0) return
@@ -30,6 +52,7 @@ Dialog {
             if (url && !seen[url]) { seen[url] = true; items.push(url) }
         }
         if (items.length === 0) return
+        selectedIndex = -1
         queue = items
         queueIndex = 0
         succeeded = 0
@@ -69,19 +92,26 @@ Dialog {
             Layout.fillWidth: true
             enabled: !dialog.batchActive && !importer.busy
             placeholderText: tx("web_pdf.url_placeholder")
-            onTextEdited: dialog.candidates = []
+            onTextEdited: { dialog.candidates = []; dialog.selectedIndex = -1 }
         }
         RowLayout {
             Button {
                 text: tx("web_pdf.find")
                 enabled: !importer.busy && !dialog.batchActive
-                onClicked: { dialog.candidates = []; importer.inspect(address.text) }
+                onClicked: { dialog.candidates = []; dialog.selectedIndex = -1; dialog.suppressAutoOpen = false; importer.inspect(address.text) }
             }
             Button {
-                text: dialog.candidates.length > 0 ? tx("web_pdf.download_all", [dialog.candidates.length]) : tx("web_pdf.download")
+                text: dialog.candidates.length > 0
+                      ? (dialog.selectedIndex >= 0 ? tx("web_pdf.download_selected") : tx("web_pdf.download_all", [dialog.candidates.length]))
+                      : tx("web_pdf.download")
                 enabled: !importer.busy && !dialog.batchActive
                 onClicked: {
-                    if (dialog.candidates.length > 0) dialog.beginAll()
+                    if (dialog.candidates.length > 0) {
+                        if (dialog.selectedIndex >= 0 && dialog.selectedIndex < dialog.candidates.length) {
+                            dialog.suppressAutoOpen = true
+                            importer.download(dialog.candidates[dialog.selectedIndex].url)
+                        } else dialog.beginAll()
+                    }
                     else if (/\.pdf(?:[?#]|$)/i.test(address.text)) importer.download(address.text)
                     else { dialog.candidates = []; importer.inspect(address.text) }
                 }
@@ -97,8 +127,12 @@ Dialog {
                     importer.cancel()
                 }
             }
+            Button {
+                text: tx("web_pdf.reset")
+                onClicked: dialog.resetDialog()
+            }
         }
-        ProgressBar { Layout.fillWidth: true; from: 0; to: 100; value: importer.progress }
+        ProgressBar { Layout.fillWidth: true; from: 0; to: 100; value: dialog.resetting ? 0 : importer.progress }
         Label {
             Layout.fillWidth: true
             wrapMode: Text.Wrap
@@ -114,11 +148,11 @@ Dialog {
             clip: true
             delegate: ItemDelegate {
                 width: ListView.view.width
-                text: modelData.title + " — " + modelData.url
+                highlighted: dialog.selectedIndex === index
+                text: (dialog.selectedIndex === index ? "✓ " : "") + modelData.title + " — " + modelData.url
                 enabled: !importer.busy && !dialog.batchActive
                 onClicked: {
-                    dialog.suppressAutoOpen = false
-                    importer.download(modelData.url)
+                    dialog.selectedIndex = dialog.selectedIndex === index ? -1 : index
                 }
             }
         }
@@ -126,7 +160,7 @@ Dialog {
     }
     Connections {
         target: importer
-        function onCandidatesFound(items) { dialog.candidates = items }
+        function onCandidatesFound(items) { if (!dialog.resetting) { dialog.candidates = items; dialog.selectedIndex = -1 } }
         function onDownloaded(path) {
             if (dialog.batchActive) {
                 dialog.completeItem(true, path)

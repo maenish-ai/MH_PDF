@@ -1,4 +1,4 @@
-# MaenPDF v7.5.3
+# MaenPDF v7.5.4
 - Correct visible application, home and About version labels.
 - Retain sequential PDF download queue, progress and failure continuation.
 - Retain update checks, download progress and SHA-256 verification.

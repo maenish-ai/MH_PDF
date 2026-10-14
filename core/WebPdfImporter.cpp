@@ -179,3 +179,15 @@ void WebPdfImporter::error(const QString &message){
 void WebPdfImporter::cancel(){
     if(m_reply)m_reply->abort();
 }
+
+void WebPdfImporter::resetUi(){
+    // Detach before aborting: finished/readyRead handlers reject stale replies.
+    QNetworkReply *reply=m_reply;
+    m_reply=nullptr;
+    if(reply){reply->abort();reply->deleteLater();}
+    if(m_output){m_output->cancelWriting();delete m_output;m_output=nullptr;}
+    m_html.clear();m_savedPath.clear();m_currentUrl=QUrl();
+    m_inspect=false;m_pdfDetected=false;m_redirects=0;
+    m_busy=false;m_progress=0;m_status.clear();
+    emit busyChanged();emit progressChanged();emit statusChanged();
+}

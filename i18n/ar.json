@@ -386,10 +386,12 @@
   "web_pdf.download": "تحميل",
   "web_pdf.download_all": "تنزيل الكل (%1)",
   "web_pdf.download_completed": "اكتمل التنزيل",
+  "web_pdf.download_selected": "تنزيل الملف المحدد",
   "web_pdf.downloading_n_of_m": "جار تنزيل %1 من %2",
   "web_pdf.error_title": "خطأ في الاستيراد",
   "web_pdf.find": "فحص ملفات بي دي إف",
   "web_pdf.notice": "يتم التعامل مع ملفات بي دي إف المتاحة فقط دون تجاوز قيود الوصول أو الحماية.",
+  "web_pdf.reset": "إعادة تعيين",
   "web_pdf.title": "استيراد بي دي إف من الإنترنت",
   "web_pdf.url_label": "رابط بي دي إف أو صفحة الويب",
   "web_pdf.url_placeholder": "مثال: رابط ملف بي دي إف أو صفحة تحتوي عليه"

@@ -20,6 +20,7 @@ public:
     Q_INVOKABLE void inspect(const QString &url);
     Q_INVOKABLE void download(const QString &url);
     Q_INVOKABLE void cancel();
+    Q_INVOKABLE void resetUi();
 signals:
     void busyChanged();
     void statusChanged();
