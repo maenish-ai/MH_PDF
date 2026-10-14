@@ -4,7 +4,9 @@
     android:versionCode="-- %%INSERT_VERSION_CODE%% --"
     android:versionName="-- %%INSERT_VERSION_NAME%% --">
 
-    <!-- Qt injects only permissions/features actually required by the build. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Qt injects additional permissions/features required by the build. -->
     <!-- %%INSERT_PERMISSIONS -->
     <!-- %%INSERT_FEATURES -->
 

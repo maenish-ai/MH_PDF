@@ -41,6 +41,7 @@
 #include "../core/PdfToolsService.h"
 #include "../core/PdfDocument.h"
 #include "../core/PrintService.h"
+#include "../core/WebPdfImporter.h"
 #include "../core/SessionImageProvider.h"
 
 namespace {
@@ -135,12 +136,14 @@ int main(int argc, char *argv[])
     DocumentManager documentManager(&appSettings);
     PdfToolsService pdfTools;
     PrintService printService;
+    WebPdfImporter webPdfImporter;
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("documentManager"), &documentManager);
     engine.rootContext()->setContextProperty(QStringLiteral("appSettings"), &appSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("pdfTools"), &pdfTools);
     engine.rootContext()->setContextProperty(QStringLiteral("printService"), &printService);
+    engine.rootContext()->setContextProperty(QStringLiteral("webPdfImporter"), &webPdfImporter);
     engine.rootContext()->setContextProperty(QStringLiteral("i18n"), &languageManager);
     engine.addImageProvider(QStringLiteral("maenpdf"),
                             new SessionImageProvider(&documentManager));

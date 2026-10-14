@@ -33,7 +33,6 @@ private:
     void request(const QUrl &url);
     void finish(QNetworkReply *reply);
     void error(const QString &message);
-    void reset();
     void parseHtml(const QUrl &base, const QByteArray &html);
     QString targetPath(const QUrl &url) const;
     QNetworkAccessManager m_network;

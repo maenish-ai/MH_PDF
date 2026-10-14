@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 6.11 REQUIRED COMPONENTS Core Gui Quick Qml QuickControls2 Pdf Concurrent)
+find_package(Qt6 6.11 REQUIRED COMPONENTS Core Gui Quick Qml QuickControls2 Pdf Concurrent Network)
 qt_standard_project_setup(REQUIRES 6.11)
 
 qt_add_executable(MaenPDF
@@ -25,6 +25,7 @@ qt_add_executable(MaenPDF
     core/SessionImageProvider.cpp core/SessionImageProvider.h
     core/PdfToolsService.cpp core/PdfToolsService.h
     core/PrintService.cpp core/PrintService.h
+    core/WebPdfImporter.cpp core/WebPdfImporter.h
 )
 
 set_source_files_properties(ui/Main.qml PROPERTIES QT_RESOURCE_ALIAS Main.qml)
@@ -32,7 +33,7 @@ set_source_files_properties(ui/Main.qml PROPERTIES QT_RESOURCE_ALIAS Main.qml)
 qt_add_qml_module(MaenPDF
     URI PDFStudio
     VERSION 7.0
-    QML_FILES ui/Main.qml
+    QML_FILES ui/Main.qml ui/PdfImportDialog.qml
     RESOURCES assets/maenpdf-logo.svg
 )
 
@@ -44,7 +45,7 @@ qt_add_resources(MaenPDF maenpdf_i18n
 )
 
 target_link_libraries(MaenPDF PRIVATE
-    Qt6::Core Qt6::Gui Qt6::Quick Qt6::Qml Qt6::QuickControls2 Qt6::Pdf Qt6::Concurrent
+    Qt6::Core Qt6::Gui Qt6::Quick Qt6::Qml Qt6::QuickControls2 Qt6::Pdf Qt6::Concurrent Qt6::Network
 )
 
 # Release hardening. MaenPDF is open source, so security must come from safe

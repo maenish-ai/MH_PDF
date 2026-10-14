@@ -2523,4 +2523,15 @@ ApplicationWindow {
             }
         }
     }
+
+    Shortcut {
+        sequence: "Ctrl+Shift+I"
+        onActivated: pdfImportDialog.open()
+    }
+    PdfImportDialog {
+        id: pdfImportDialog
+        parent: Overlay.overlay
+        importer: webPdfImporter
+        documents: documentManager
+    }
 }
