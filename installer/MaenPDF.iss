@@ -1,5 +1,5 @@
 #define MyAppName "MaenPDF"
-#define MyAppVersion "7.5.2"
+#define MyAppVersion "7.5.3"
 #define MyAppPublisher "MaenPDF"
 #define MyAppExeName "MaenPDF.exe"
 #define MySettingsGeneration "7100"
@@ -23,9 +23,9 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
 CloseApplications=yes
-RestartApplications=no
+RestartApplications=yes
 ChangesAssociations=yes
-VersionInfoVersion=7.5.2.0
+VersionInfoVersion=7.5.3.0
 VersionInfoProductName={#MyAppName}
 VersionInfoDescription=MaenPDF Installer
 
