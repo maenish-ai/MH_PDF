@@ -73,22 +73,37 @@ void WebPdfImporter::request(const QUrl &url){
     connect(reply,&QNetworkReply::downloadProgress,this,[this,reply](qint64 n,qint64 total){
         if(reply!=m_reply)return;
         if(n>(m_inspect?MaxHtml:MaxPdf)){reply->abort();return;}
-        if(total>0){
-            const qint64 percentage = n * 100 / total;
-            m_progress = int(percentage < 0 ? 0 : (percentage > 99 ? 99 : percentage));
-            emit progressChanged();
-        }
+        if(total>0){const qint64 percent = n * 100 / total; m_progress = int(percent < 0 ? 0 : (percent > 99 ? 99 : percent));emit progressChanged();}
     });
     connect(reply,&QIODevice::readyRead,this,[this,reply](){
         if(reply!=m_reply)return;
+        // Redirect responses are not PDF content.
+        if(reply->attribute(QNetworkRequest::RedirectionTargetAttribute).isValid()) {
+            reply->readAll();
+            return;
+        }
         QByteArray data=reply->readAll();
         if(m_inspect){
             if(m_html.size()+data.size()>MaxHtml){reply->abort();return;}
             m_html.append(data);
         } else {
             if(!m_output){
-                m_pdfDetected=data.startsWith("%PDF-");
-                if(!m_pdfDetected){reply->abort();return;}
+                // A network chunk may contain fewer than five bytes.
+                if(!m_pdfDetected) {
+                    m_html.append(data);
+                    if(m_html.size() < 5) return;
+                    if(!m_html.startsWith("%PDF-")) {
+                        // The URL is a webpage: collect it and offer the PDF links.
+                        m_inspect = true;
+                        m_status = "Webpage detected. Finding PDFs...";
+                        emit statusChanged();
+                        if(m_html.size() > MaxHtml) { reply->abort(); return; }
+                        return;
+                    }
+                    data = m_html;
+                    m_html.clear();
+                    m_pdfDetected = true;
+                }
                 m_savedPath=targetPath(m_currentUrl);
                 m_output=new QSaveFile(m_savedPath);
                 if(!m_output->open(QIODevice::WriteOnly)){reply->abort();return;}
@@ -122,7 +137,8 @@ void WebPdfImporter::finish(QNetworkReply *reply){
             emit candidatesFound(QVariantList{entry});
         }else parseHtml(m_currentUrl,m_html);
         m_html.clear();
-        m_status="Inspection complete";emit statusChanged();
+        m_status="Inspection complete. Select a PDF from the list to download.";
+        emit statusChanged();
     } else {
         if(!m_output){error("No valid PDF data received");return;}
         if(!m_output->commit()){error("Unable to save PDF");return;}

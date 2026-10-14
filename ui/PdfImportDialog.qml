@@ -20,7 +20,11 @@ Dialog {
         TextField { id: address; Layout.fillWidth: true; placeholderText: tx("web_pdf.url_placeholder") }
         RowLayout {
             Button { text: tx("web_pdf.find"); enabled: !importer.busy; onClicked: importer.inspect(address.text) }
-            Button { text: tx("web_pdf.download"); enabled: !importer.busy; onClicked: importer.download(address.text) }
+            Button { text: tx("web_pdf.download"); enabled: !importer.busy; onClicked: {
+                // A webpage must be inspected; results are downloaded by clicking an item.
+                dialog.candidates = []
+                importer.download(address.text)
+            } }
             Button { text: tx("web_pdf.cancel"); enabled: importer.busy; onClicked: importer.cancel() }
         }
         ProgressBar { Layout.fillWidth: true; from: 0; to: 100; value: importer.progress }
