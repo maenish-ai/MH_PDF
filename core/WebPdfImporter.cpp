@@ -41,12 +41,7 @@ void WebPdfImporter::start(const QUrl &url,bool inspect) {
     request(url);
 }
 QString WebPdfImporter::targetPath(const QUrl &url) const {
-#ifdef Q_OS_ANDROID
-    // Scoped storage: app-specific storage is writable without broad storage permissions.
-    QString dir=QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-#else
     QString dir=QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
-#endif
     if(dir.isEmpty()) dir=QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
     QDir().mkpath(dir);
     QString name=QFileInfo(url.path()).fileName();
@@ -78,23 +73,16 @@ void WebPdfImporter::request(const QUrl &url){
     connect(reply,&QNetworkReply::downloadProgress,this,[this,reply](qint64 n,qint64 total){
         if(reply!=m_reply)return;
         if(n>(m_inspect?MaxHtml:MaxPdf)){reply->abort();return;}
-        if(total>0){m_progress=int(qBound<qint64>(qint64(0), n*100/total, qint64(99)));emit progressChanged();}
+        if(total>0){m_progress=int(qBound<qint64>(0,n*100/total,99));emit progressChanged();}
     });
     connect(reply,&QIODevice::readyRead,this,[this,reply](){
         if(reply!=m_reply)return;
-        // Redirect responses are handled only after completion.
-        if(reply->attribute(QNetworkRequest::RedirectionTargetAttribute).isValid()) {
-            reply->readAll();
-            return;
-        }
         QByteArray data=reply->readAll();
         if(m_inspect){
             if(m_html.size()+data.size()>MaxHtml){reply->abort();return;}
             m_html.append(data);
         } else {
             if(!m_output){
-                if(data.size()<5 && !data.isEmpty()) { m_html.append(data); return; }
-                if(!m_html.isEmpty()) { data.prepend(m_html); m_html.clear(); }
                 m_pdfDetected=data.startsWith("%PDF-");
                 if(!m_pdfDetected){reply->abort();return;}
                 m_savedPath=targetPath(m_currentUrl);

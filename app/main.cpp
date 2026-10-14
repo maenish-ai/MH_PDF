@@ -41,8 +41,8 @@
 #include "../core/PdfToolsService.h"
 #include "../core/PdfDocument.h"
 #include "../core/PrintService.h"
-#include "../core/WebPdfImporter.h"
 #include "../core/SessionImageProvider.h"
+#include "../core/WebPdfImporter.h"
 
 namespace {
 void showStartupFailure(const QString &details)
@@ -143,8 +143,8 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("appSettings"), &appSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("pdfTools"), &pdfTools);
     engine.rootContext()->setContextProperty(QStringLiteral("printService"), &printService);
-    engine.rootContext()->setContextProperty(QStringLiteral("webPdfImporter"), &webPdfImporter);
     engine.rootContext()->setContextProperty(QStringLiteral("i18n"), &languageManager);
+    engine.rootContext()->setContextProperty(QStringLiteral("webPdfImporter"), &webPdfImporter);
     engine.addImageProvider(QStringLiteral("maenpdf"),
                             new SessionImageProvider(&documentManager));
 

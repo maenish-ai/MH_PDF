@@ -438,6 +438,12 @@ ApplicationWindow {
         onAccepted: pdfDocument.appendPdf(selectedFile)
     }
 
+    PdfImportDialog {
+        id: webPdfImportDlg
+        importer: webPdfImporter
+        documents: documentManager
+    }
+
     FileDialog {
         id: saveDlg
         title: tx("file.save_pdf")
@@ -1328,6 +1334,7 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+Shift+D"; enabled: !pdfDocument.locked && pdfDocument.pageCount > 1; onActivated: pdfDocument.deletePage(pdfDocument.currentPage) }
     Shortcut { sequence: "Ctrl+Shift+T"; onActivated: pdfDocument.addBlankPage() }
     Shortcut { sequence: "Ctrl+Shift+I"; enabled: !pdfDocument.locked; onActivated: appendDlg.open() }
+    Shortcut { sequence: "Ctrl+Shift+L"; onActivated: webPdfImportDlg.open() }
     Shortcut { sequence: "Ctrl+W"; onActivated: requestCloseTab(documentManager.currentIndex) }
     Shortcut { sequence: "Ctrl+Tab"; enabled: documentManager.count > 1 && !keyboardTextInputActive(); onActivated: documentManager.currentIndex = (documentManager.currentIndex + 1) % documentManager.count }
     Shortcut { sequence: "Ctrl+Shift+Tab"; enabled: documentManager.count > 1 && !keyboardTextInputActive(); onActivated: documentManager.currentIndex = (documentManager.currentIndex - 1 + documentManager.count) % documentManager.count }
@@ -1372,6 +1379,7 @@ ApplicationWindow {
             Action { text: tx("action.new_tab"); onTriggered: { documentManager.newTab(); homeVisible = false } }
             Action { text: tx("action.open"); onTriggered: openDlg.open() }
             Action { text: tx("action.combine"); enabled: !pdfDocument.locked; onTriggered: appendDlg.open() }
+            Action { text: tx("action.import_web_pdf"); onTriggered: webPdfImportDlg.open() }
             MenuSeparator {}
             Action { text: tx("action.save"); onTriggered: pdfDocument.filePath === "" ? saveDlg.open() : pdfDocument.save() }
             Action { text: tx("action.save_as"); onTriggered: saveDlg.open() }
@@ -1585,6 +1593,7 @@ ApplicationWindow {
                 ToolButton { text: tx("action.home"); onClicked: homeVisible = true }
                 ToolButton { text: tx("action.new_tab"); onClicked: { documentManager.newTab(); homeVisible = false } }
                 ToolButton { text: tx("action.open"); onClicked: openDlg.open() }
+                ToolButton { text: tx("action.import_web_pdf"); onClicked: webPdfImportDlg.open() }
                 ToolButton { text: tx("action.save"); onClicked: pdfDocument.filePath === "" ? saveDlg.open() : pdfDocument.save() }
                 ToolButton { text: tx("action.print"); enabled: printService.available; onClicked: printService.printDocument(pdfDocument, false) }
                 ToolButton { text: tx("dialog.find"); onClicked: searchDlg.open() }
@@ -2522,16 +2531,5 @@ ApplicationWindow {
                 }
             }
         }
-    }
-
-    Shortcut {
-        sequence: "Ctrl+Shift+I"
-        onActivated: pdfImportDialog.open()
-    }
-    PdfImportDialog {
-        id: pdfImportDialog
-        parent: Overlay.overlay
-        importer: webPdfImporter
-        documents: documentManager
     }
 }
