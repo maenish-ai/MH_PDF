@@ -1,4 +1,4 @@
-# MaenPDF 7.5.0 — Highlight, Unicode & Full Screen
+# MaenPDF 7.5.1 — Highlight, Unicode & Full Screen
 
 - Added a multi-color highlight palette shared by text/area highlights and the freehand Highlight Pen.
 - Added freehand Highlight Pen with adjustable opacity and width while reusing the lightweight touched-patch stroke engine.

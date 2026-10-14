@@ -45,7 +45,7 @@ This matrix records ideas worth adopting without copying proprietary code or UI.
 
 Disabled UI items must stay disabled until these are genuinely implemented and regression-tested.
 
-## 7.5.0 highlight, Unicode and full-screen additions
+## 7.5.1 highlight, Unicode and full-screen additions
 - Debounced visual zoom with delayed high-quality render commit.
 - Page-local invalidation: editing one page does not force every visible page image to reload.
 - Smaller adaptive prefetch windows for 4–6 GB systems.

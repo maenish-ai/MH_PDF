@@ -15,7 +15,7 @@ The manager discovers GitHub Releases, chooses an OS-specific asset, downloads i
 1. Bump the runtime version, release tag, and package metadata consistently.
 2. Build signed Windows installer and signed Android package.
 3. Publish both as GitHub Release assets with SHA-256 digests.
-4. Test 7.5.0 -> 7.5.1: one automatic prompt only, including after restart.
+4. Test 7.5.1 -> 7.5.1: one automatic prompt only, including after restart.
 5. Test successful install: application reports 7.5.1 and no longer offers 7.5.1.
 6. Test failed install: installed version remains unchanged; manual check still offers update.
 7. Test newer 7.5.2: prompt appears once for this new target.
