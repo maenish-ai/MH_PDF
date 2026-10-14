@@ -5,7 +5,7 @@ source='\n'.join(p.read_text(encoding='utf-8',errors='ignore') for folder in ['a
 gitignore=(r/'.gitignore').read_text(encoding='utf-8')
 tools=(r/'core/PdfToolsService.cpp').read_text(encoding='utf-8')
 checks={
- 'network isolated to web importer': all(('QNetworkAccessManager' not in p.read_text(encoding='utf-8') and 'QNetworkRequest' not in p.read_text(encoding='utf-8')) for p in (r/'core').glob('*.cpp') if p.name != 'WebPdfImporter.cpp'),
+ 'network isolated to web importer and update manager': all(('QNetworkAccessManager' not in p.read_text(encoding='utf-8') and 'QNetworkRequest' not in p.read_text(encoding='utf-8')) for p in (r/'core').glob('*.cpp') if p.name not in {'WebPdfImporter.cpp', 'UpdateManager.cpp'}) and all('QNetworkRequest' in (r/'core'/name).read_text(encoding='utf-8') for name in ('WebPdfImporter.cpp','UpdateManager.cpp')),
  'no embedded private key':'BEGIN PRIVATE KEY' not in source and 'BEGIN RSA PRIVATE KEY' not in source,
  'no shell command execution':'cmd.exe' not in tools and 'powershell' not in tools and 'system(' not in tools,
  'external providers use QProcess arguments':'process.start(program, arguments)' in tools,

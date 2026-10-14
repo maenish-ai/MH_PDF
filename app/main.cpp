@@ -43,6 +43,7 @@
 #include "../core/PrintService.h"
 #include "../core/SessionImageProvider.h"
 #include "../core/WebPdfImporter.h"
+#include "../core/UpdateManager.h"
 
 namespace {
 void showStartupFailure(const QString &details)
@@ -137,6 +138,7 @@ int main(int argc, char *argv[])
     PdfToolsService pdfTools;
     PrintService printService;
     WebPdfImporter webPdfImporter;
+    UpdateManager updateManager;
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("documentManager"), &documentManager);
@@ -145,6 +147,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("printService"), &printService);
     engine.rootContext()->setContextProperty(QStringLiteral("i18n"), &languageManager);
     engine.rootContext()->setContextProperty(QStringLiteral("webPdfImporter"), &webPdfImporter);
+    engine.rootContext()->setContextProperty(QStringLiteral("updateManager"), &updateManager);
     engine.addImageProvider(QStringLiteral("maenpdf"),
                             new SessionImageProvider(&documentManager));
 

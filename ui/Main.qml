@@ -15,6 +15,28 @@ ApplicationWindow {
     LayoutMirroring.enabled: i18n.rtl
     LayoutMirroring.childrenInherit: true
 
+    Dialog {
+        id: updateDialog
+        title: tx("updater.title")
+        modal: true
+        anchors.centerIn: parent
+        width: Math.min(430, win.width - 40)
+        standardButtons: Dialog.Close
+        ColumnLayout {
+            anchors.fill: parent
+            Label { text: updateManager.available ? tx("updater.available", [updateManager.version]) : tx("updater.none"); wrapMode: Text.Wrap; Layout.fillWidth: true }
+            Label { text: updateManager.status; wrapMode: Text.Wrap; Layout.fillWidth: true }
+            ProgressBar { Layout.fillWidth: true; from: 0; to: 100; value: updateManager.progress; visible: updateManager.busy && updateManager.available }
+            Button { text: tx("updater.download"); enabled: updateManager.available && !updateManager.busy && !updateManager.ready; onClicked: updateManager.download() }
+            Button { text: tx("updater.install"); visible: updateManager.ready; onClicked: updateManager.install() }
+            Button { text: tx("updater.releases"); onClicked: updateManager.openReleasePage() }
+        }
+    }
+    Connections {
+        target: updateManager
+        function onUpdateFound() { updateDialog.open() }
+    }
+
     property var pdfDocument: documentManager.currentDocument
     property real zoom: 0.74
     // Visual zoom updates immediately; renderZoom is committed after a short
@@ -1535,7 +1557,7 @@ ApplicationWindow {
             title: tx("menu.help")
             Action { text: tx("action.command_palette"); onTriggered: commandDlg.open() }
             Action { text: tx("action.keyboard_shortcuts"); onTriggered: shortcutsDlg.open() }
-            Action { text: tx("action.check_updates"); onTriggered: appSettings.openReleasesPage() }
+            Action { text: tx("action.check_updates"); onTriggered: { updateManager.check(); updateDialog.open() } }
             Action { text: tx("action.project_page"); onTriggered: appSettings.openProjectPage() }
             Action { text: tx("action.privacy"); onTriggered: privacyDlg.open() }
             Action { text: tx("action.support"); enabled: appSettings.supportAvailable; onTriggered: appSettings.openSupportPage() }

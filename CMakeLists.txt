@@ -26,6 +26,7 @@ qt_add_executable(MaenPDF
     core/PdfToolsService.cpp core/PdfToolsService.h
     core/PrintService.cpp core/PrintService.h
     core/WebPdfImporter.cpp core/WebPdfImporter.h
+    core/UpdateManager.cpp core/UpdateManager.h
 )
 
 set_source_files_properties(ui/Main.qml PROPERTIES QT_RESOURCE_ALIAS Main.qml)
