@@ -78,11 +78,11 @@ Dialog {
                 onClicked: { dialog.candidates = []; importer.inspect(address.text) }
             }
             Button {
-                text: dialog.candidates.length > 0 ? "Download All (" + dialog.candidates.length + ")" : tx("web_pdf.download")
+                text: dialog.candidates.length > 0 ? tx("web_pdf.download_all", [dialog.candidates.length]) : tx("web_pdf.download")
                 enabled: !importer.busy && !dialog.batchActive
                 onClicked: {
                     if (dialog.candidates.length > 0) dialog.beginAll()
-                    else if (/\\.pdf(?:[?#]|$)/i.test(address.text)) importer.download(address.text)
+                    else if (/\.pdf(?:[?#]|$)/i.test(address.text)) importer.download(address.text)
                     else { dialog.candidates = []; importer.inspect(address.text) }
                 }
             }
@@ -103,7 +103,7 @@ Dialog {
             Layout.fillWidth: true
             wrapMode: Text.Wrap
             text: dialog.batchActive
-                  ? "Downloading " + (dialog.queueIndex + 1) + " of " + dialog.queue.length
+                  ? tx("web_pdf.downloading_n_of_m", [dialog.queueIndex + 1, dialog.queue.length])
                     + " — " + importer.status
                   : importer.status
         }
@@ -151,15 +151,14 @@ Dialog {
     }
     Dialog {
         id: batchSummary
-        title: "Download completed"
+        title: tx("web_pdf.download_completed")
         modal: true
         anchors.centerIn: parent
         standardButtons: Dialog.Ok
         Label {
             width: 350
             wrapMode: Text.Wrap
-            text: dialog.succeeded + " PDFs downloaded successfully, "
-                  + dialog.failedCount + " failed.\nSaved in your Downloads folder."
+            text: tx("web_pdf.batch_result", [dialog.succeeded, dialog.failedCount])
         }
     }
     Dialog {

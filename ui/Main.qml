@@ -24,7 +24,12 @@ ApplicationWindow {
         standardButtons: Dialog.Close
         ColumnLayout {
             anchors.fill: parent
-            Label { text: updateManager.available ? tx("updater.available", [updateManager.version]) : tx("updater.none"); wrapMode: Text.Wrap; Layout.fillWidth: true }
+            Label {
+                text: updateManager.ready ? tx("updater.download_ready", [updateManager.version])
+                     : (updateManager.available ? tx("updater.available", [updateManager.version]) : tx("updater.latest_installed"))
+                wrapMode: Text.Wrap
+                Layout.fillWidth: true
+            }
             Label { text: updateManager.status; wrapMode: Text.Wrap; Layout.fillWidth: true }
             ProgressBar { Layout.fillWidth: true; from: 0; to: 100; value: updateManager.progress; visible: updateManager.busy && updateManager.available }
             Button { text: tx("updater.download"); enabled: updateManager.available && !updateManager.busy && !updateManager.ready; onClicked: updateManager.download() }
