@@ -1,0 +1,70 @@
+name: Publish MaenPDF Release
+on:
+  workflow_run:
+    workflows: ["MaenPDF CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  publish:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout CI commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          persist-credentials: false
+      - name: Determine version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(sed -nE 's/.*setApplicationVersion\(QStringLiteral\("([0-9]+\.[0-9]+\.[0-9]+)"\)\).*/\1/p' app/main.cpp | head -1)"
+          test -n "$version" || { echo 'Application version missing'; exit 1; }
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+      - name: Check existing release
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then echo 'exists=true' >> "$GITHUB_OUTPUT"; else echo 'exists=false' >> "$GITHUB_OUTPUT"; fi
+      - name: Download successful Windows build
+        if: steps.existing.outputs.exists == 'false' && github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v4
+        with:
+          name: MaenPDF-Windows-Setup
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          path: release-assets
+      - name: Locate last successful main build
+        if: steps.existing.outputs.exists == 'false' && github.event_name == 'workflow_dispatch'
+        id: run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          id="$(gh run list --workflow ci.yml --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId')"
+          test -n "$id" || { echo 'No successful CI build'; exit 1; }
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+      - name: Download setup from last successful build
+        if: steps.existing.outputs.exists == 'false' && github.event_name == 'workflow_dispatch'
+        uses: actions/download-artifact@v4
+        with:
+          name: MaenPDF-Windows-Setup
+          run-id: ${{ steps.run.outputs.id }}
+          github-token: ${{ github.token }}
+          path: release-assets
+      - name: Publish verified Windows installer
+        if: steps.existing.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test -s release-assets/MaenPDF-Setup.exe
+          (cd release-assets && sha256sum MaenPDF-Setup.exe > SHA256SUMS.txt)
+          gh release create "$TAG" release-assets/MaenPDF-Setup.exe release-assets/SHA256SUMS.txt --target "$SHA" --title "MaenPDF $TAG" --generate-notes --latest
