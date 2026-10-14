@@ -6,29 +6,107 @@ Dialog {
     id: dialog
     title: tx("web_pdf.title")
     modal: true
-    width: Math.min(680, parent ? parent.width - 40 : 680)
-    height: 440
+    width: Math.min(740, parent ? parent.width - 40 : 740)
+    height: 500
     anchors.centerIn: parent
-    standardButtons: Dialog.Close
+    standardButtons: importer.busy || batchActive ? Dialog.NoButton : Dialog.Close
     property var importer
     property var documents
     property var candidates: []
+    property bool batchActive: false
+    property var queue: []
+    property int queueIndex: 0
+    property int succeeded: 0
+    property int failedCount: 0
+    property var failures: []
+    property bool suppressAutoOpen: false
+
+    function beginAll() {
+        if (importer.busy || candidates.length === 0) return
+        var seen = {}
+        var items = []
+        for (var i = 0; i < candidates.length; ++i) {
+            var url = candidates[i].url
+            if (url && !seen[url]) { seen[url] = true; items.push(url) }
+        }
+        if (items.length === 0) return
+        queue = items
+        queueIndex = 0
+        succeeded = 0
+        failedCount = 0
+        failures = []
+        batchActive = true
+        suppressAutoOpen = true
+        startNext()
+    }
+    function startNext() {
+        if (!batchActive) return
+        if (queueIndex >= queue.length) {
+            batchActive = false
+            batchSummary.open()
+            return
+        }
+        importer.download(queue[queueIndex])
+    }
+    function completeItem(ok, detail) {
+        if (!batchActive) return
+        if (ok) succeeded++
+        else {
+            failedCount++
+            failures.push(detail)
+        }
+        queueIndex++
+        // Defer until WebPdfImporter has set busy=false after its signal.
+        Qt.callLater(startNext)
+    }
 
     ColumnLayout {
         anchors.fill: parent
+        spacing: 8
         Label { text: tx("web_pdf.url_label") }
-        TextField { id: address; Layout.fillWidth: true; placeholderText: tx("web_pdf.url_placeholder") }
+        TextField {
+            id: address
+            Layout.fillWidth: true
+            enabled: !dialog.batchActive && !importer.busy
+            placeholderText: tx("web_pdf.url_placeholder")
+            onTextEdited: dialog.candidates = []
+        }
         RowLayout {
-            Button { text: tx("web_pdf.find"); enabled: !importer.busy; onClicked: importer.inspect(address.text) }
-            Button { text: tx("web_pdf.download"); enabled: !importer.busy; onClicked: {
-                // A webpage must be inspected; results are downloaded by clicking an item.
-                dialog.candidates = []
-                importer.download(address.text)
-            } }
-            Button { text: tx("web_pdf.cancel"); enabled: importer.busy; onClicked: importer.cancel() }
+            Button {
+                text: tx("web_pdf.find")
+                enabled: !importer.busy && !dialog.batchActive
+                onClicked: { dialog.candidates = []; importer.inspect(address.text) }
+            }
+            Button {
+                text: dialog.candidates.length > 0 ? "Download All (" + dialog.candidates.length + ")" : tx("web_pdf.download")
+                enabled: !importer.busy && !dialog.batchActive
+                onClicked: {
+                    if (dialog.candidates.length > 0) dialog.beginAll()
+                    else if (/\\.pdf(?:[?#]|$)/i.test(address.text)) importer.download(address.text)
+                    else { dialog.candidates = []; importer.inspect(address.text) }
+                }
+            }
+            Button {
+                text: tx("web_pdf.cancel")
+                enabled: importer.busy || dialog.batchActive
+                onClicked: {
+                    if (dialog.batchActive) {
+                        dialog.batchActive = false
+                        dialog.suppressAutoOpen = true
+                    }
+                    importer.cancel()
+                }
+            }
         }
         ProgressBar { Layout.fillWidth: true; from: 0; to: 100; value: importer.progress }
-        Label { text: importer.status; wrapMode: Text.Wrap }
+        Label {
+            Layout.fillWidth: true
+            wrapMode: Text.Wrap
+            text: dialog.batchActive
+                  ? "Downloading " + (dialog.queueIndex + 1) + " of " + dialog.queue.length
+                    + " — " + importer.status
+                  : importer.status
+        }
         ListView {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -37,7 +115,11 @@ Dialog {
             delegate: ItemDelegate {
                 width: ListView.view.width
                 text: modelData.title + " — " + modelData.url
-                onClicked: importer.download(modelData.url)
+                enabled: !importer.busy && !dialog.batchActive
+                onClicked: {
+                    dialog.suppressAutoOpen = false
+                    importer.download(modelData.url)
+                }
             }
         }
         Label { text: tx("web_pdf.notice"); wrapMode: Text.Wrap }
@@ -46,12 +128,39 @@ Dialog {
         target: importer
         function onCandidatesFound(items) { dialog.candidates = items }
         function onDownloaded(path) {
+            if (dialog.batchActive) {
+                dialog.completeItem(true, path)
+                return
+            }
+            if (dialog.suppressAutoOpen) return
             if (documents.openDocument(path)) {
                 homeVisible = false
                 dialog.close()
             }
         }
-        function onFailed(message) { errorText.text = message; errorDialog.open() }
+        function onFailed(message) {
+            if (dialog.batchActive) {
+                dialog.completeItem(false, message)
+                return
+            }
+            if (!dialog.suppressAutoOpen) {
+                errorText.text = message
+                errorDialog.open()
+            }
+        }
+    }
+    Dialog {
+        id: batchSummary
+        title: "Download completed"
+        modal: true
+        anchors.centerIn: parent
+        standardButtons: Dialog.Ok
+        Label {
+            width: 350
+            wrapMode: Text.Wrap
+            text: dialog.succeeded + " PDFs downloaded successfully, "
+                  + dialog.failedCount + " failed.\nSaved in your Downloads folder."
+        }
     }
     Dialog {
         id: errorDialog
