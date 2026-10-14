@@ -73,7 +73,11 @@ void WebPdfImporter::request(const QUrl &url){
     connect(reply,&QNetworkReply::downloadProgress,this,[this,reply](qint64 n,qint64 total){
         if(reply!=m_reply)return;
         if(n>(m_inspect?MaxHtml:MaxPdf)){reply->abort();return;}
-        if(total>0){m_progress=int(qBound<qint64>(0,n*100/total,99));emit progressChanged();}
+        if(total>0){
+            const qint64 percentage = n * 100 / total;
+            m_progress = int(percentage < 0 ? 0 : (percentage > 99 ? 99 : percentage));
+            emit progressChanged();
+        }
     });
     connect(reply,&QIODevice::readyRead,this,[this,reply](){
         if(reply!=m_reply)return;
