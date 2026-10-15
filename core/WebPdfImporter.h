@@ -5,7 +5,14 @@
 #include <QSaveFile>
 #include <QUrl>
 #include <QVariantList>
+
+class QEvent;
 class QNetworkReply;
+#ifndef Q_OS_ANDROID
+class QSystemTrayIcon;
+class QTimer;
+class QWindow;
+#endif
 
 class WebPdfImporter final : public QObject {
     Q_OBJECT
@@ -28,15 +35,20 @@ signals:
     void candidatesFound(const QVariantList &items);
     void downloaded(const QString &path);
     void failed(const QString &message);
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override;
 private:
     bool allowed(const QUrl &url) const;
     void start(const QUrl &url, bool inspect);
     void request(const QUrl &url);
     void finish(QNetworkReply *reply);
     void error(const QString &message);
-    void reset();
     void parseHtml(const QUrl &base, const QByteArray &html);
     QString targetPath(const QUrl &url) const;
+#ifndef Q_OS_ANDROID
+    void evaluateDesktopLifetime();
+    void restoreMainWindow();
+#endif
     QNetworkAccessManager m_network;
     QPointer<QNetworkReply> m_reply;
     QSaveFile *m_output = nullptr;
@@ -49,6 +61,12 @@ private:
     bool m_pdfDetected = false;
     int m_progress = 0;
     int m_redirects = 0;
+#ifndef Q_OS_ANDROID
+    QPointer<QWindow> m_mainWindow;
+    QSystemTrayIcon *m_tray = nullptr;
+    QTimer *m_backgroundExitTimer = nullptr;
+    bool m_mainCloseRequested = false;
+#endif
     static constexpr qint64 MaxHtml = 4 * 1024 * 1024;
     static constexpr qint64 MaxPdf = 300 * 1024 * 1024;
 };
