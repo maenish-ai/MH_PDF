@@ -27,6 +27,7 @@ jobs:
       tag: ${{ steps.version.outputs.tag }}
       sha: ${{ steps.version.outputs.sha }}
       exists: ${{ steps.existing.outputs.exists }}
+      signing_ready: ${{ steps.signing.outputs.ready }}
     steps:
       - name: Checkout release commit
         uses: actions/checkout@v7.0.1
@@ -66,10 +67,35 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Check Windows signing configuration
+        id: signing
+        shell: bash
+        env:
+          WINDOWS_SIGNING_PFX_BASE64: ${{ secrets.WINDOWS_SIGNING_PFX_BASE64 }}
+          WINDOWS_SIGNING_PFX_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PFX_PASSWORD }}
+        run: |
+          if [[ -n "$WINDOWS_SIGNING_PFX_BASE64" && -n "$WINDOWS_SIGNING_PFX_PASSWORD" ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "Windows signing secrets are configured."
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Signed Windows release was not published because the Authenticode signing secrets are not configured."
+            {
+              echo "### Signed Windows release skipped"
+              echo
+              echo "CI passed, but publishing is intentionally skipped until both repository secrets exist:"
+              echo
+              echo "- \`WINDOWS_SIGNING_PFX_BASE64\`"
+              echo "- \`WINDOWS_SIGNING_PFX_PASSWORD\`"
+              echo
+              echo "After adding them, run **Publish Signed MaenPDF Release** manually from Actions."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   publish:
     name: Build, sign and publish Windows release
     needs: prepare
-    if: ${{ needs.prepare.outputs.exists == 'false' }}
+    if: ${{ needs.prepare.outputs.exists == 'false' && needs.prepare.outputs.signing_ready == 'true' }}
     runs-on: windows-2022
     steps:
       - name: Checkout exact release commit

@@ -63,6 +63,7 @@ void WebPdfImporter::request(const QUrl &url){
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,QNetworkRequest::ManualRedirectPolicy);
     req.setTransferTimeout(30000);
     req.setRawHeader("Accept","application/pdf,text/html;q=0.8");
+    req.setRawHeader("User-Agent","MaenPDF-WebPdfImporter/1.0");
     QNetworkReply *reply=m_network.get(req);
     m_reply=reply;
     connect(reply,&QNetworkReply::metaDataChanged,this,[this,reply](){
@@ -93,9 +94,11 @@ void WebPdfImporter::request(const QUrl &url){
                     m_html.append(data);
                     if(m_html.size() < 5) return;
                     if(!m_html.startsWith("%PDF-")) {
-                        // The URL is a webpage: collect it and offer the PDF links.
+                        // The URL is a webpage: collect it and offer only links that
+                        // the page itself exposes as PDF resources. Do not attempt to
+                        // bypass sign-in, viewer controls, DRM or site access rules.
                         m_inspect = true;
-                        m_status = "Webpage detected. Finding PDFs...";
+                        m_status = "Webpage detected. Finding directly exposed PDFs...";
                         emit statusChanged();
                         if(m_html.size() > MaxHtml) { reply->abort(); return; }
                         return;
@@ -135,9 +138,11 @@ void WebPdfImporter::finish(QNetworkReply *reply){
         if(m_html.startsWith("%PDF-")){
             QVariantMap entry;entry["url"]=m_currentUrl.toString();entry["title"]="PDF";
             emit candidatesFound(QVariantList{entry});
-        }else parseHtml(m_currentUrl,m_html);
+            m_status="Direct PDF detected. Select it to download.";
+        }else{
+            parseHtml(m_currentUrl,m_html);
+        }
         m_html.clear();
-        m_status="Inspection complete. Select a PDF from the list to download.";
         emit statusChanged();
     } else {
         if(!m_output){error("No valid PDF data received");return;}
@@ -152,24 +157,55 @@ void WebPdfImporter::finish(QNetworkReply *reply){
 void WebPdfImporter::parseHtml(const QUrl &base,const QByteArray &bytes){
     QVariantList results;QSet<QString> seen;
     const QString html=QString::fromUtf8(bytes);
+
+    auto addCandidate=[&](QString value,bool explicitlyPdf){
+        value=value.trimmed();
+        value.replace("&amp;","&");
+        value.replace("&quot;","\"");
+        value.replace("&#39;","'");
+        if(value.isEmpty())return;
+        const QUrl url=base.resolved(QUrl(value));
+        if(!allowed(url))return;
+        const bool looksPdf=url.path().endsWith(".pdf",Qt::CaseInsensitive)
+            || url.query().contains(".pdf",Qt::CaseInsensitive);
+        if(!explicitlyPdf && !looksPdf)return;
+        const QString key=url.toString();
+        if(seen.contains(key))return;
+        seen.insert(key);
+        QVariantMap entry;
+        entry["url"]=key;
+        QString title=QFileInfo(url.path()).fileName();
+        if(title.isEmpty())title="PDF";
+        entry["title"]=title;
+        results.append(entry);
+    };
+
+    // Normal links/resources whose URL itself identifies a PDF.
     QRegularExpression rx(R"((?:href|src|data|data-url)\s*=\s*["']([^"']+)["'])",
                           QRegularExpression::CaseInsensitiveOption);
     auto it=rx.globalMatch(html);
-    while(it.hasNext() && results.size()<100){
-        QString value=it.next().captured(1);
-        value.replace("&amp;","&");
-        const QUrl url=base.resolved(QUrl(value));
-        if(!allowed(url))continue;
-        if(!url.path().endsWith(".pdf",Qt::CaseInsensitive)
-           && !url.query().contains(".pdf",Qt::CaseInsensitive))continue;
-        const QString key=url.toString();
-        if(seen.contains(key))continue;
-        seen.insert(key);
-        QVariantMap entry;entry["url"]=key;
-        entry["title"]=QFileInfo(url.path()).fileName();
-        results.append(entry);
+    while(it.hasNext() && results.size()<100)
+        addCandidate(it.next().captured(1),false);
+
+    // Also accept standards-based embedded PDF resources even when the URL has
+    // no .pdf suffix (for example /download?id=123 with type=application/pdf).
+    QRegularExpression pdfTagRx(R"(<[^>]+\btype\s*=\s*["']application/pdf(?:\s*;[^"']*)?["'][^>]*>)",
+                                QRegularExpression::CaseInsensitiveOption);
+    QRegularExpression tagUrlRx(R"((?:href|src|data|data-url)\s*=\s*["']([^"']+)["'])",
+                                QRegularExpression::CaseInsensitiveOption);
+    auto tagIt=pdfTagRx.globalMatch(html);
+    while(tagIt.hasNext() && results.size()<100){
+        const QString tag=tagIt.next().captured(0);
+        const auto urlMatch=tagUrlRx.match(tag);
+        if(urlMatch.hasMatch())addCandidate(urlMatch.captured(1),true);
     }
+
     emit candidatesFound(results);
+    if(results.isEmpty()){
+        m_status="No direct PDF link was found on this page. The site may use a JavaScript/embedded viewer, require sign-in, or not expose a downloadable PDF. Use a direct PDF URL, or download the file in your browser and open it in MaenPDF.";
+    }else{
+        m_status=QString("Found %1 PDF link(s). Select one or download all.").arg(results.size());
+    }
 }
 void WebPdfImporter::error(const QString &message){
     if(m_output){m_output->cancelWriting();delete m_output;m_output=nullptr;}
