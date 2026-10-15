@@ -1,70 +1,234 @@
-name: Publish MaenPDF Release
+name: Publish Signed MaenPDF Release
+
 on:
   workflow_run:
     workflows: ["MaenPDF CI"]
     types: [completed]
     branches: [main]
   workflow_dispatch:
+
 permissions:
   contents: write
+
+concurrency:
+  group: maenpdf-signed-release-${{ github.event.workflow_run.head_sha || github.sha }}
+  cancel-in-progress: false
+
+env:
+  QT_VERSION: '6.11.2'
+
 jobs:
-  publish:
+  prepare:
+    name: Prepare signed release
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      sha: ${{ steps.version.outputs.sha }}
+      exists: ${{ steps.existing.outputs.exists }}
     steps:
-      - name: Checkout CI commit
-        uses: actions/checkout@v4
+      - name: Checkout release commit
+        uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           persist-credentials: false
-      - name: Determine version
+
+      - name: Validate synchronized version
         id: version
         shell: bash
         run: |
           set -euo pipefail
-          version="$(sed -nE 's/.*setApplicationVersion\(QStringLiteral\("([0-9]+\.[0-9]+\.[0-9]+)"\)\).*/\1/p' app/main.cpp | head -1)"
-          test -n "$version" || { echo 'Application version missing'; exit 1; }
-          echo "tag=v$version" >> "$GITHUB_OUTPUT"
-      - name: Check existing release
+          cmake_version="$(sed -nE 's/^project\(MaenPDF VERSION ([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' CMakeLists.txt | head -1)"
+          runtime_version="$(sed -nE 's/.*setApplicationVersion\(QStringLiteral\("([0-9]+\.[0-9]+\.[0-9]+)"\)\).*/\1/p' app/main.cpp | head -1)"
+          installer_version="$(sed -nE 's/^#define MyAppVersion "([0-9]+\.[0-9]+\.[0-9]+)"/\1/p' installer/MaenPDF.iss | head -1)"
+          test -n "$cmake_version" -a -n "$runtime_version" -a -n "$installer_version"
+          if [ "$cmake_version" != "$runtime_version" ] || [ "$cmake_version" != "$installer_version" ]; then
+            echo "Version mismatch: CMake=$cmake_version runtime=$runtime_version installer=$installer_version" >&2
+            exit 1
+          fi
+          sha="${{ github.event.workflow_run.head_sha || github.sha }}"
+          echo "version=$cmake_version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$cmake_version" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether release already exists
         id: existing
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}
+        shell: bash
         run: |
-          if gh release view "$TAG" >/dev/null 2>&1; then echo 'exists=true' >> "$GITHUB_OUTPUT"; else echo 'exists=false' >> "$GITHUB_OUTPUT"; fi
-      - name: Download successful Windows build
-        if: steps.existing.outputs.exists == 'false' && github.event_name == 'workflow_run'
-        uses: actions/download-artifact@v4
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "$TAG already exists; signed publishing is a no-op."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  publish:
+    name: Build, sign and publish Windows release
+    needs: prepare
+    if: ${{ needs.prepare.outputs.exists == 'false' }}
+    runs-on: windows-2022
+    steps:
+      - name: Checkout exact release commit
+        uses: actions/checkout@v7.0.1
         with:
-          name: MaenPDF-Windows-Setup
-          run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ github.token }}
-          path: release-assets
-      - name: Locate last successful main build
-        if: steps.existing.outputs.exists == 'false' && github.event_name == 'workflow_dispatch'
-        id: run
+          ref: ${{ needs.prepare.outputs.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Require trusted Windows signing certificate
+        shell: pwsh
+        env:
+          WINDOWS_SIGNING_PFX_BASE64: ${{ secrets.WINDOWS_SIGNING_PFX_BASE64 }}
+          WINDOWS_SIGNING_PFX_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PFX_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_PFX_BASE64)) {
+            throw "Missing GitHub Actions secret WINDOWS_SIGNING_PFX_BASE64. A public-trust Authenticode certificate is required; the release will not be published unsigned."
+          }
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_PFX_PASSWORD)) {
+            throw "Missing GitHub Actions secret WINDOWS_SIGNING_PFX_PASSWORD."
+          }
+          $pfxPath = Join-Path $env:RUNNER_TEMP 'maenpdf-release-signing.pfx'
+          try {
+            $bytes = [Convert]::FromBase64String($env:WINDOWS_SIGNING_PFX_BASE64)
+          } catch {
+            throw "WINDOWS_SIGNING_PFX_BASE64 is not valid Base64."
+          }
+          [IO.File]::WriteAllBytes($pfxPath, $bytes)
+          "MAENPDF_PFX_PATH=$pfxPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Install current aqtinstall extension support
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "git+https://github.com/miurahr/aqtinstall.git"
+
+      - name: Install Qt + QtPdf
+        shell: pwsh
+        run: |
+          python -m aqt install-qt windows desktop $env:QT_VERSION win64_msvc2022_64 -O "$env:RUNNER_TEMP\Qt" -m qtpdf
+          $qtRoot = "$env:RUNNER_TEMP\Qt\$env:QT_VERSION\msvc2022_64"
+          if (!(Test-Path "$qtRoot\lib\cmake\Qt6Pdf\Qt6PdfConfig.cmake")) { throw "QtPdf extension was not installed" }
+          "QT_ROOT_DIR=$qtRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "$qtRoot\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Configure release build
+        shell: pwsh
+        run: cmake -S . -B build-release -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR"
+
+      - name: Build release
+        shell: pwsh
+        run: cmake --build build-release --config Release --parallel
+
+      - name: Deploy complete Windows runtime
+        shell: pwsh
+        run: |
+          ./scripts/deploy_windows.ps1 `
+            -QtRootDir "$env:QT_ROOT_DIR" `
+            -BuildExe "build-release/Release/MaenPDF.exe" `
+            -DistDir "dist"
+
+      - name: Sign MaenPDF application executable
+        shell: pwsh
+        env:
+          WINDOWS_SIGNING_PFX_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PFX_PASSWORD }}
+        run: |
+          ./scripts/sign_windows.ps1 `
+            -File "$PWD\dist\MaenPDF.exe" `
+            -PfxPath "$env:MAENPDF_PFX_PATH" `
+            -PfxPassword "$env:WINDOWS_SIGNING_PFX_PASSWORD"
+
+      - name: Build installer from signed application
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (!(Test-Path $iscc)) {
+            $cmd = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+            if ($null -eq $cmd) { throw "Inno Setup compiler not found" }
+            $iscc = $cmd.Source
+          }
+          & $iscc "installer\MaenPDF.iss"
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+          if (!(Test-Path "installer-output\MaenPDF-Setup.exe")) { throw "MaenPDF-Setup.exe was not produced" }
+
+      - name: Sign final Windows installer
+        shell: pwsh
+        env:
+          WINDOWS_SIGNING_PFX_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PFX_PASSWORD }}
+        run: |
+          ./scripts/sign_windows.ps1 `
+            -File "$PWD\installer-output\MaenPDF-Setup.exe" `
+            -PfxPath "$env:MAENPDF_PFX_PATH" `
+            -PfxPassword "$env:WINDOWS_SIGNING_PFX_PASSWORD"
+
+      - name: Verify signed package, version and installed executable
+        shell: pwsh
+        env:
+          EXPECTED_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          $setup = (Resolve-Path "installer-output\MaenPDF-Setup.exe").Path
+          $setupSig = Get-AuthenticodeSignature $setup
+          if ($setupSig.Status -ne 'Valid') { throw "Installer signature is not valid: $($setupSig.Status)" }
+
+          $installDir = Join-Path $env:RUNNER_TEMP 'MaenPDF-Signed-Release-Smoke'
+          $args = @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$installDir")
+          $proc = Start-Process -FilePath $setup -ArgumentList $args -Wait -PassThru
+          if ($proc.ExitCode -ne 0) { throw "Signed installer smoke install failed with code $($proc.ExitCode)" }
+
+          $installedExe = Join-Path $installDir 'MaenPDF.exe'
+          if (!(Test-Path $installedExe)) { throw "Installed MaenPDF.exe is missing" }
+          $exeSig = Get-AuthenticodeSignature $installedExe
+          if ($exeSig.Status -ne 'Valid') { throw "Installed MaenPDF.exe signature is not valid: $($exeSig.Status)" }
+          if ($setupSig.SignerCertificate.Thumbprint -ne $exeSig.SignerCertificate.Thumbprint) {
+            throw "Installer and MaenPDF.exe were not signed by the same certificate"
+          }
+          $productVersion = (Get-Item $installedExe).VersionInfo.ProductVersion
+          if ($productVersion -ne $env:EXPECTED_VERSION) {
+            throw "Installed product version mismatch: expected $env:EXPECTED_VERSION, got $productVersion"
+          }
+
+      - name: Prepare release assets and SHA-256 manifest
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release-assets | Out-Null
+          Copy-Item "installer-output\MaenPDF-Setup.exe" "release-assets\MaenPDF-Setup.exe" -Force
+          $hash = (Get-FileHash "release-assets\MaenPDF-Setup.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash *MaenPDF-Setup.exe" | Set-Content "release-assets\SHA256SUMS.txt" -Encoding ascii
+          Get-Content "release-assets\SHA256SUMS.txt"
+
+      - name: Preserve signed release artifact
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: MaenPDF-Windows-Signed-${{ needs.prepare.outputs.version }}
+          path: release-assets/
+          if-no-files-found: error
+
+      - name: Publish signed GitHub Release
+        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          TARGET_SHA: ${{ needs.prepare.outputs.sha }}
         run: |
-          id="$(gh run list --workflow ci.yml --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId')"
-          test -n "$id" || { echo 'No successful CI build'; exit 1; }
-          echo "id=$id" >> "$GITHUB_OUTPUT"
-      - name: Download setup from last successful build
-        if: steps.existing.outputs.exists == 'false' && github.event_name == 'workflow_dispatch'
-        uses: actions/download-artifact@v4
-        with:
-          name: MaenPDF-Windows-Setup
-          run-id: ${{ steps.run.outputs.id }}
-          github-token: ${{ github.token }}
-          path: release-assets
-      - name: Publish verified Windows installer
-        if: steps.existing.outputs.exists == 'false'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.version.outputs.tag }}
-          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          gh release create "$env:TAG" `
+            "release-assets\MaenPDF-Setup.exe" `
+            "release-assets\SHA256SUMS.txt" `
+            --target "$env:TARGET_SHA" `
+            --title "MaenPDF $env:TAG" `
+            --generate-notes `
+            --latest
+
+      - name: Remove temporary signing certificate file
+        if: always()
+        shell: pwsh
         run: |
-          set -euo pipefail
-          test -s release-assets/MaenPDF-Setup.exe
-          (cd release-assets && sha256sum MaenPDF-Setup.exe > SHA256SUMS.txt)
-          gh release create "$TAG" release-assets/MaenPDF-Setup.exe release-assets/SHA256SUMS.txt --target "$SHA" --title "MaenPDF $TAG" --generate-notes --latest
+          if ($env:MAENPDF_PFX_PATH -and (Test-Path $env:MAENPDF_PFX_PATH)) {
+            Remove-Item $env:MAENPDF_PFX_PATH -Force
+          }

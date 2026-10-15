@@ -1,21 +1,24 @@
 from pathlib import Path
 import sys
 root=Path(__file__).resolve().parents[1]
-required=['.github/workflows/ci.yml','android/AndroidManifest.xml','android/README.md','docs/GITHUB_RELEASE.md','CMakeLists.txt','.gitignore','LICENSE','SECURITY.md','BRAND_POLICY.md']
+required=['.github/workflows/ci.yml','.github/workflows/auto-release.yml','android/AndroidManifest.xml','android/README.md','docs/GITHUB_RELEASE.md','CMakeLists.txt','.gitignore','LICENSE','SECURITY.md','BRAND_POLICY.md','scripts/sign_windows.ps1']
 checks={f'file:{x}':(root/x).exists() for x in required}
 cm=(root/'CMakeLists.txt').read_text(encoding='utf-8')
 wf=(root/'.github/workflows/ci.yml').read_text(encoding='utf-8')
+auto=(root/'.github/workflows/auto-release.yml').read_text(encoding='utf-8')
 play=(root/'.github/workflows/play-release.yml').read_text(encoding='utf-8')
 manifest=(root/'android/AndroidManifest.xml').read_text(encoding='utf-8')
 ard=(root/'android/README.md').read_text(encoding='utf-8')
 iss=(root/'installer/MaenPDF.iss').read_text(encoding='utf-8')
 pre=(root/'scripts/preflight.py').read_text(encoding='utf-8')
+sign=(root/'scripts/sign_windows.ps1').read_text(encoding='utf-8')
+gitignore=(root/'.gitignore').read_text(encoding='utf-8')
 checks.update({
- 'v7.5 semantic version':'project(MaenPDF VERSION 7.5.4' in cm,
+ 'v7.5 semantic version':'project(MaenPDF VERSION 7.5.5' in cm,
  'v7 QML module':'VERSION 7.0' in cm,
  'stable package id':'org.orbispdf.app' in cm and 'org.orbispdf.app' in ard,
- 'version code 70504':'QT_ANDROID_VERSION_CODE 70504' in cm,
- 'version name 7.5.4':'QT_ANDROID_VERSION_NAME "7.5.4"' in cm,
+ 'version code 70505':'QT_ANDROID_VERSION_CODE 70505' in cm,
+ 'version name 7.5.5':'QT_ANDROID_VERSION_NAME "7.5.5"' in cm,
  'api36 target':'QT_ANDROID_TARGET_SDK_VERSION 36' in cm and "ANDROID_API: '36'" in wf,
  'min api28':'QT_ANDROID_MIN_SDK_VERSION 28' in cm and "ANDROID_MIN_API: '28'" in wf,
  'Qt pinned':'QT_VERSION: \'6.11.2\'' in wf,
@@ -25,7 +28,7 @@ checks.update({
  'Windows staged runtime startup smoke test':'Smoke test staged MaenPDF with native Windows platform' in wf and 'Remove-Item Env:QT_QPA_PLATFORM' in wf,
  'Windows real PDF open smoke test':'Smoke test staged MaenPDF opening PDF fixture' in wf and 'create_smoke_pdf.py' in wf and 'Cannot assign to non-existent property' in wf,
  'Windows interaction engine smoke test':'Exercise text selection drawing crop and redaction engine' in wf and '--interaction-smoke' in wf and 'INTERACTION_SMOKE_PASS' in wf,
- 'Windows installer v7.5':'#define MyAppVersion "7.5.4"' in iss and 'VersionInfoVersion=7.5.4.0' in iss,
+ 'Windows installer v7.5':'#define MyAppVersion "7.5.5"' in iss and 'VersionInfoVersion=7.5.5.0' in iss,
  'Windows clean application upgrade':'[InstallDelete]' in iss and 'Type: filesandordirs; Name: "{app}\\*"' in iss,
  'Windows one-time settings migration':'SettingsGeneration' in iss and 'ResetMaenPDFUserState' in iss and 'NeedsFirstCleanMigration' in iss,
  'desktop native print support':'Qt6::PrintSupport' in cm and 'core/PrintService.cpp' in cm,
@@ -51,7 +54,11 @@ checks.update({
  'Android manifest Qt lib metadata':'android.app.lib_name' in manifest,
  'Android insertion markers':'%%INSERT_PERMISSIONS' in manifest and '%%INSERT_FEATURES' in manifest,
  'PDF open intent':'android.intent.action.VIEW' in manifest and 'application/pdf' in manifest,
- 'signing secrets excluded':'*.jks' in (root/'.gitignore').read_text(encoding='utf-8'),
+ 'signing secrets excluded':'*.jks' in gitignore and '*.pfx' in gitignore and '*.p12' in gitignore,
+ 'Windows release requires signing secrets':'WINDOWS_SIGNING_PFX_BASE64' in auto and 'WINDOWS_SIGNING_PFX_PASSWORD' in auto,
+ 'Windows app and installer signed before release':auto.count('scripts/sign_windows.ps1') >= 2 and 'Publish signed GitHub Release' in auto,
+ 'Windows Authenticode SHA256 timestamping':'/fd SHA256' in sign and '/tr $TimestampUrl' in sign and '/td SHA256' in sign,
+ 'Windows signed artifact verified':'Get-AuthenticodeSignature' in auto and "Status -ne 'Valid'" in auto,
  'updates documented':'same package ID' in ard and 'same signing key' in ard,
  'v7 audits in preflight':all(x in pre for x in ['compiler_guard_audit.py','engine_v7_audit.py','security_audit.py','performance_audit.py','interaction_audit.py','shortcuts_audit.py','ui_wiring_audit.py','open_source_audit.py']),
  'v7 audits in CI':all(x in wf for x in ['compiler_guard_audit.py','engine_v7_audit.py','security_audit.py','performance_audit.py','interaction_audit.py','shortcuts_audit.py','ui_wiring_audit.py','open_source_audit.py']),

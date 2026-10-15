@@ -1,5 +1,5 @@
 #define MyAppName "MaenPDF"
-#define MyAppVersion "7.5.4"
+#define MyAppVersion "7.5.5"
 #define MyAppPublisher "MaenPDF"
 #define MyAppExeName "MaenPDF.exe"
 #define MySettingsGeneration "7100"
@@ -9,6 +9,9 @@ AppId={{77D8DA72-BF81-4D2A-8DB1-771C4040586E}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
+AppPublisherURL=https://github.com/maenish-ai/MH_PDF
+AppSupportURL=https://github.com/maenish-ai/MH_PDF/issues
+AppUpdatesURL=https://github.com/maenish-ai/MH_PDF/releases/latest
 DefaultDirName={autopf}\MaenPDF
 DefaultGroupName=MaenPDF
 DisableProgramGroupPage=yes
@@ -25,7 +28,8 @@ PrivilegesRequired=admin
 CloseApplications=yes
 RestartApplications=yes
 ChangesAssociations=yes
-VersionInfoVersion=7.5.4.0
+VersionInfoVersion=7.5.5.0
+VersionInfoCompany={#MyAppPublisher}
 VersionInfoProductName={#MyAppName}
 VersionInfoDescription=MaenPDF Installer
 

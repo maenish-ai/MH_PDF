@@ -15,6 +15,7 @@ Thumbs.db
 # Signing and secrets
 *.jks
 *.keystore
+*.pfx
 *.p12
 *.pem
 *.key

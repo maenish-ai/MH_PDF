@@ -1,0 +1,9 @@
+حزمة MaenPDF 7.5.5 للتوزيع الموقّع على Windows
+
+ارفع محتويات هذا الملف المضغوط إلى جذر مستودع GitHub مع الحفاظ على نفس المجلدات، ووافق على استبدال الملفات الموجودة بنفس المسار.
+
+مهم جدًا: شهادة التوقيع الخاصة لا يمكن ولا يجب وضعها داخل المستودع. قبل إصدار Windows الموقّع أضف Secretين في GitHub Actions كما هو موضح في docs/WINDOWS_CODE_SIGNING.md:
+WINDOWS_SIGNING_PFX_BASE64
+WINDOWS_SIGNING_PFX_PASSWORD
+
+الـ workflow سيرفض نشر Windows Release غير موقّع إذا كانت بيانات التوقيع غير موجودة.
