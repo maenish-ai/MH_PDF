@@ -1,0 +1,209 @@
+name: Publish MaenPDF v7.5.5
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  QT_VERSION: '6.11.2'
+  RELEASE_VERSION: '7.5.5'
+  RELEASE_TAG: 'v7.5.5'
+
+jobs:
+  publish:
+    name: Build and publish v7.5.5
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: main
+
+      - name: Verify repository version is 7.5.5
+        shell: pwsh
+        run: |
+          $cmake = Get-Content "CMakeLists.txt" -Raw
+          $main = Get-Content "app/main.cpp" -Raw
+          $iss = Get-Content "installer/MaenPDF.iss" -Raw
+
+          if ($cmake -notmatch 'project\(MaenPDF VERSION 7\.5\.5') {
+            throw "CMakeLists.txt is not version 7.5.5"
+          }
+          if ($main -notmatch 'setApplicationVersion\(QStringLiteral\("7\.5\.5"\)\)') {
+            throw "app/main.cpp is not version 7.5.5"
+          }
+          if ($iss -notmatch '#define MyAppVersion "7\.5\.5"') {
+            throw "installer/MaenPDF.iss is not version 7.5.5"
+          }
+
+      - name: Stop if v7.5.5 already exists
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$env:RELEASE_TAG" *> $null
+          if ($LASTEXITCODE -eq 0) {
+            throw "Release $env:RELEASE_TAG already exists. Delete/edit it instead of creating a duplicate."
+          }
+          $global:LASTEXITCODE = 0
+
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Install current aqtinstall extension support
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "git+https://github.com/miurahr/aqtinstall.git"
+
+      - name: Install Qt + QtPdf
+        shell: pwsh
+        run: |
+          python -m aqt install-qt windows desktop $env:QT_VERSION win64_msvc2022_64 -O "$env:RUNNER_TEMP\Qt" -m qtpdf
+          $qtRoot = "$env:RUNNER_TEMP\Qt\$env:QT_VERSION\msvc2022_64"
+          if (!(Test-Path "$qtRoot\lib\cmake\Qt6Pdf\Qt6PdfConfig.cmake")) {
+            throw "QtPdf extension was not installed"
+          }
+          "QT_ROOT_DIR=$qtRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "$qtRoot\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Configure release build
+        shell: pwsh
+        run: |
+          cmake -S . -B build-release -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR"
+
+      - name: Build release
+        shell: pwsh
+        run: |
+          cmake --build build-release --config Release --parallel
+
+      - name: Deploy complete Windows runtime
+        shell: pwsh
+        run: |
+          ./scripts/deploy_windows.ps1 `
+            -QtRootDir "$env:QT_ROOT_DIR" `
+            -BuildExe "build-release/Release/MaenPDF.exe" `
+            -DistDir "dist"
+
+      - name: Optional Authenticode signing of MaenPDF.exe
+        shell: pwsh
+        env:
+          WINDOWS_SIGNING_PFX_BASE64: ${{ secrets.WINDOWS_SIGNING_PFX_BASE64 }}
+          WINDOWS_SIGNING_PFX_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PFX_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_PFX_BASE64) -or
+              [string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_PFX_PASSWORD)) {
+            Write-Warning "Windows signing secrets are not configured. Publishing will continue unsigned."
+            exit 0
+          }
+
+          $pfxPath = Join-Path $env:RUNNER_TEMP "maenpdf-release-signing.pfx"
+          [IO.File]::WriteAllBytes(
+            $pfxPath,
+            [Convert]::FromBase64String($env:WINDOWS_SIGNING_PFX_BASE64)
+          )
+
+          ./scripts/sign_windows.ps1 `
+            -File "$PWD\dist\MaenPDF.exe" `
+            -PfxPath "$pfxPath" `
+            -PfxPassword "$env:WINDOWS_SIGNING_PFX_PASSWORD"
+
+          "MAENPDF_PFX_PATH=$pfxPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (!(Test-Path $iscc)) {
+            $cmd = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+            if ($null -eq $cmd) {
+              throw "Inno Setup compiler not found"
+            }
+            $iscc = $cmd.Source
+          }
+
+          & $iscc "installer\MaenPDF.iss"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Inno Setup failed with exit code $LASTEXITCODE"
+          }
+
+          if (!(Test-Path "installer-output\MaenPDF-Setup.exe")) {
+            throw "MaenPDF-Setup.exe was not produced"
+          }
+
+      - name: Optional Authenticode signing of installer
+        shell: pwsh
+        env:
+          WINDOWS_SIGNING_PFX_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PFX_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:MAENPDF_PFX_PATH) -or
+              !(Test-Path $env:MAENPDF_PFX_PATH)) {
+            Write-Warning "Installer will be published unsigned because no signing certificate was configured."
+            exit 0
+          }
+
+          ./scripts/sign_windows.ps1 `
+            -File "$PWD\installer-output\MaenPDF-Setup.exe" `
+            -PfxPath "$env:MAENPDF_PFX_PATH" `
+            -PfxPassword "$env:WINDOWS_SIGNING_PFX_PASSWORD"
+
+      - name: Create SHA256SUMS.txt
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release-assets | Out-Null
+          Copy-Item "installer-output\MaenPDF-Setup.exe" "release-assets\MaenPDF-Setup.exe" -Force
+
+          $hash = (Get-FileHash "release-assets\MaenPDF-Setup.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash *MaenPDF-Setup.exe" | Set-Content "release-assets\SHA256SUMS.txt" -Encoding ascii
+
+          Write-Host "MaenPDF-Setup.exe SHA-256: $hash"
+
+      - name: Publish GitHub Release v7.5.5 as Latest
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$env:RELEASE_TAG" `
+            "release-assets\MaenPDF-Setup.exe" `
+            "release-assets\SHA256SUMS.txt" `
+            --target "${{ github.sha }}" `
+            --title "MaenPDF v7.5.5" `
+            --notes "MaenPDF v7.5.5 maintenance release." `
+            --latest
+
+      - name: Verify GitHub latest release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $json = gh api "repos/${{ github.repository }}/releases/latest" | ConvertFrom-Json
+
+          if ($json.tag_name -ne "v7.5.5") {
+            throw "GitHub latest release is $($json.tag_name), expected v7.5.5"
+          }
+
+          $setup = $json.assets | Where-Object { $_.name -eq "MaenPDF-Setup.exe" } | Select-Object -First 1
+          if ($null -eq $setup) {
+            throw "Latest release does not contain MaenPDF-Setup.exe"
+          }
+
+          if ($setup.digest -notmatch '^sha256:[0-9a-fA-F]{64}$') {
+            throw "GitHub did not expose a valid SHA-256 asset digest yet."
+          }
+
+          Write-Host "SUCCESS: GitHub latest release is v7.5.5"
+          Write-Host "SUCCESS: MaenPDF 7.5.4 updater can now discover v7.5.5"
+
+      - name: Remove temporary signing certificate
+        if: always()
+        shell: pwsh
+        run: |
+          if ($env:MAENPDF_PFX_PATH -and (Test-Path $env:MAENPDF_PFX_PATH)) {
+            Remove-Item $env:MAENPDF_PFX_PATH -Force
+          }
