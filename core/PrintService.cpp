@@ -4,11 +4,10 @@
 #include "MemoryPolicy.h"
 
 #ifndef Q_OS_ANDROID
-#include <QAbstractPrintDialog>
 #include <QPainter>
-#include <QPrintDialog>
 #include <QPrintPreviewDialog>
 #include <QPrinter>
+#include <QPrinterInfo>
 #include <QPageLayout>
 #endif
 
@@ -22,11 +21,53 @@ bool PrintService::available() const {
 #endif
 }
 
-bool PrintService::printDocument(QObject *documentObject, bool currentPageOnly, int scalePercent) {
+QVariantList PrintService::printers() const {
+    QVariantList result;
+#ifndef Q_OS_ANDROID
+    const QString defaultName = QPrinterInfo::defaultPrinterName();
+    for (const QString &name : QPrinterInfo::availablePrinterNames()) {
+        const QVariantMap entry{{QStringLiteral("name"), name}};
+        if (name == defaultName)
+            result.prepend(entry);
+        else
+            result.append(entry);
+    }
+#endif
+    return result;
+}
+
+QVariantList PrintService::paperSizes(const QString &printerName) const {
+    QVariantList result;
+#ifndef Q_OS_ANDROID
+    const QPrinterInfo info = QPrinterInfo::printerInfo(printerName);
+    const QPageSize defaultSize = info.defaultPageSize();
+    for (const QPageSize &size : info.supportedPageSizes()) {
+        const QVariantMap entry{{QStringLiteral("name"), size.name()},
+                                {QStringLiteral("key"), size.key()}};
+        if (size.key() == defaultSize.key())
+            result.prepend(entry);
+        else
+            result.append(entry);
+    }
+#else
+    Q_UNUSED(printerName)
+#endif
+    return result;
+}
+
+bool PrintService::printDocument(QObject *documentObject, const QVariantMap &settings) {
+    return runJob(documentObject, settings, false);
+}
+
+bool PrintService::printPreview(QObject *documentObject, const QVariantMap &settings) {
+    return runJob(documentObject, settings, true);
+}
+
+bool PrintService::runJob(QObject *documentObject, const QVariantMap &settings, bool preview) {
 #ifdef Q_OS_ANDROID
     Q_UNUSED(documentObject)
-    Q_UNUSED(currentPageOnly)
-    Q_UNUSED(scalePercent)
+    Q_UNUSED(settings)
+    Q_UNUSED(preview)
     emit operationFailed(QStringLiteral("print.error.unavailable"), {});
     return false;
 #else
@@ -36,21 +77,49 @@ bool PrintService::printDocument(QObject *documentObject, bool currentPageOnly, 
         return false;
     }
 
-    QPrinter printer(QPrinter::HighResolution);
+    const QString name = settings.value(QStringLiteral("printer")).toString();
+    const QPrinterInfo info = QPrinterInfo::printerInfo(name);
+    if ((!preview || !name.isEmpty()) && info.isNull()) {
+        emit operationFailed(QStringLiteral("print.error.no_printer"), {});
+        return false;
+    }
+
+    QPrinter printer(info, QPrinter::HighResolution);
     printer.setDocName(document->title());
     printer.setFullPage(false);
+    const QString paperKey = settings.value(QStringLiteral("paper")).toString();
+    for (const QPageSize &size : info.supportedPageSizes()) {
+        if (size.key() == paperKey) {
+            printer.setPageSize(size);
+            break;
+        }
+    }
+    printer.setPageOrientation(settings.value(QStringLiteral("landscape")).toBool()
+                               ? QPageLayout::Landscape : QPageLayout::Portrait);
 
-    QPrintDialog dialog(&printer);
-    dialog.setWindowTitle(QStringLiteral("MaenPDF"));
-    dialog.setMinMax(1, document->pageCount());
-    dialog.setFromTo(currentPageOnly ? document->currentPage() + 1 : 1,
-                     currentPageOnly ? document->currentPage() + 1 : document->pageCount());
-    dialog.setOption(QAbstractPrintDialog::PrintPageRange, true);
+    const int first = qBound(1, settings.value(QStringLiteral("from"), 1).toInt(), document->pageCount()) - 1;
+    const int last = qBound(first + 1, settings.value(QStringLiteral("to"), document->pageCount()).toInt(),
+                            document->pageCount()) - 1;
+    const int copies = qBound(1, settings.value(QStringLiteral("copies"), 1).toInt(), 99);
+    const int scale = settings.value(QStringLiteral("scale"), 100).toInt();
+    const bool driverCopies = printer.supportsMultipleCopies();
+    if (driverCopies) {
+        printer.setCopyCount(copies);
+        printer.setCollateCopies(true);
+    }
 
-    if (dialog.exec() != QDialog::Accepted)
+    if (preview) {
+        QPrintPreviewDialog dialog(&printer);
+        dialog.setWindowTitle(QStringLiteral("MaenPDF"));
+        connect(&dialog, &QPrintPreviewDialog::paintRequested, this,
+                [this, document, first, last, scale](QPrinter *requestedPrinter) {
+                    paintDocument(document, requestedPrinter, first, last, 1, scale);
+                });
+        dialog.exec();
         return true;
+    }
 
-    const bool ok = paintDocument(document, &printer, currentPageOnly, scalePercent);
+    const bool ok = paintDocument(document, &printer, first, last, driverCopies ? 1 : copies, scale);
     if (ok)
         emit operationFinished(QStringLiteral("print.done"), {});
     else
@@ -59,47 +128,9 @@ bool PrintService::printDocument(QObject *documentObject, bool currentPageOnly, 
 #endif
 }
 
-bool PrintService::printPreview(QObject *documentObject, bool currentPageOnly, int scalePercent) {
-#ifdef Q_OS_ANDROID
-    Q_UNUSED(documentObject)
-    Q_UNUSED(currentPageOnly)
-    Q_UNUSED(scalePercent)
-    emit operationFailed(QStringLiteral("print.error.unavailable"), {});
-    return false;
-#else
-    auto *document = qobject_cast<PdfDocument *>(documentObject);
-    if (!document || document->pageCount() <= 0) {
-        emit operationFailed(QStringLiteral("print.error.no_document"), {});
-        return false;
-    }
-
-    QPrinter printer(QPrinter::HighResolution);
-    printer.setDocName(document->title());
-    printer.setFullPage(false);
-    QPrintPreviewDialog preview(&printer);
-    preview.setWindowTitle(QStringLiteral("MaenPDF"));
-    connect(&preview, &QPrintPreviewDialog::paintRequested, this,
-            [this, document, currentPageOnly, scalePercent](QPrinter *requestedPrinter) {
-                paintDocument(document, requestedPrinter, currentPageOnly, scalePercent);
-            });
-    preview.exec();
-    return true;
-#endif
-}
-
 #ifndef Q_OS_ANDROID
-bool PrintService::paintDocument(PdfDocument *document, QPrinter *printer, bool currentPageOnly, int scalePercent) const {
-    if (!document || !printer || !document->pageModel() || document->pageCount() <= 0)
-        return false;
-
-    int first = currentPageOnly ? document->currentPage() : 0;
-    int last = currentPageOnly ? document->currentPage() : document->pageCount() - 1;
-
-    if (!currentPageOnly && printer->printRange() == QPrinter::PageRange) {
-        first = qBound(0, printer->fromPage() - 1, document->pageCount() - 1);
-        last = qBound(first, printer->toPage() - 1, document->pageCount() - 1);
-    }
-
+bool PrintService::paintDocument(PdfDocument *document, QPrinter *printer, int first, int last,
+                                 int copies, int scalePercent) const {
     QPainter painter;
     if (!painter.begin(printer))
         return false;
@@ -115,12 +146,14 @@ bool PrintService::paintDocument(PdfDocument *document, QPrinter *printer, bool 
     painter.setClipRect(QRectF(QPointF(), QSizeF(printable)));
 
     bool ok = true;
-    for (int pageIndex = first; pageIndex <= last; ++pageIndex) {
-        if (pageIndex > first && !printer->newPage()) {
+    const int pagesPerCopy = last - first + 1;
+    for (int sheet = 0; sheet < pagesPerCopy * copies; ++sheet) {
+        if (sheet > 0 && !printer->newPage()) {
             ok = false;
             break;
         }
 
+        const int pageIndex = first + sheet % pagesPerCopy;
         const QSizeF points(model->pageWidth(pageIndex), model->pageHeight(pageIndex));
         const QSizeF target = points * pixelsPerPoint;
         QSizeF raster = target;
@@ -137,7 +170,6 @@ bool PrintService::paintDocument(PdfDocument *document, QPrinter *printer, bool 
                                  target.width(), target.height());
         painter.drawImage(destination, page);
     }
-    painter.end();
-    return ok;
+    return painter.end() && ok;
 }
 #endif

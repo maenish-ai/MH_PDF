@@ -12,6 +12,7 @@
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTimer>
+#include <QUuid>
 #include <QVersionNumber>
 
 namespace {
@@ -140,7 +141,11 @@ void UpdateManager::download(){
  const QString dir=QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
  if(dir.isEmpty()){fail(QStringLiteral("No update storage available"));return;}
  if(!QDir().mkpath(dir+QStringLiteral("/updates"))){fail(QStringLiteral("Cannot create update directory"));return;}
- m_targetPath=dir+QStringLiteral("/updates/")+QFileInfo(m_assetUrl.path()).fileName()+QStringLiteral(".part");
+ // Each download gets its own path, even when releases reuse the asset name.
+ m_localPath.clear();
+ const QString downloadId=QUuid::createUuid().toString(QUuid::WithoutBraces);
+ m_targetPath=dir+QStringLiteral("/updates/")+downloadId+QLatin1Char('-')
+   +QFileInfo(m_assetUrl.path()).fileName()+QStringLiteral(".part");
  m_file.setFileName(m_targetPath);
  if(!m_file.open(QIODevice::WriteOnly|QIODevice::Truncate)){fail(QStringLiteral("Cannot write update file"));return;}
  m_hash.reset();m_bytes=0;m_progress=0;m_downloading=true;m_busy=true;
@@ -148,15 +153,31 @@ void UpdateManager::download(){
 }
 void UpdateManager::openReleasePage(){QDesktopServices::openUrl(m_releaseUrl.isValid()?m_releaseUrl:releasesPage);}
 void UpdateManager::install(){
- if(m_localPath.isEmpty()||!QFileInfo::exists(m_localPath))return;
- // Installation is deliberately handed to the OS. Android requires user approval;
- // Windows installers may request elevation. Never replace a running executable.
- const QString ext=QFileInfo(m_assetUrl.path()).suffix().toLower();
- const QString dest=m_localPath.endsWith(QStringLiteral(".part"))?m_localPath.left(m_localPath.size()-5):m_localPath;
- if(!QFile::exists(dest))QFile::rename(m_localPath,dest);
- if(ext==QStringLiteral("apk")){
-  openReleasePage(); // Android package installer needs a FileProvider / Play distribution.
- }else{
-  QDesktopServices::openUrl(QUrl::fromLocalFile(dest));
+ if(m_busy||m_localPath.isEmpty())return;
+ if(!QFileInfo::exists(m_localPath)){
+  m_localPath.clear();
+  fail(QStringLiteral("updater.installer_missing"));
+  return;
  }
+
+ // Android installation is handled by the release page.
+ if(QFileInfo(m_assetUrl.path()).suffix().compare(QStringLiteral("apk"),Qt::CaseInsensitive)==0){
+  openReleasePage();
+  return;
+ }
+
+ // Hand off only the downloaded, verified file. QFile::rename refuses to
+ // overwrite an existing file, so a collision can never launch a stale setup.
+ if(m_localPath.endsWith(QStringLiteral(".part"))){
+  const QString installerPath=m_localPath.left(m_localPath.size()-5);
+  if(!QFile::rename(m_localPath,installerPath)){
+   QFile::remove(m_localPath);
+   m_localPath.clear();
+   fail(QStringLiteral("updater.installer_prepare_failed"));
+   return;
+  }
+  m_localPath=installerPath;
+ }
+ if(!QDesktopServices::openUrl(QUrl::fromLocalFile(m_localPath)))
+  fail(QStringLiteral("updater.installer_open_failed"));
 }

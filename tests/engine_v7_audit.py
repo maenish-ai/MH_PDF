@@ -20,7 +20,7 @@ checks.update({
  'multi-document tabs':'m_documents' in dm and 'currentDocumentChanged' in dm,
  'close other tabs':'closeOtherTabs' in dm,
  'settings schema migration':'CurrentSettingsSchema' in (r/'core/AppSettings.h').read_text(encoding='utf-8') and 'migrateSettings' in (r/'core/AppSettings.cpp').read_text(encoding='utf-8'),
- 'native print service':'QPrintDialog' in (r/'core/PrintService.cpp').read_text(encoding='utf-8') and 'QPrintPreviewDialog' in (r/'core/PrintService.cpp').read_text(encoding='utf-8'),
+ 'native print service':'QPrinterInfo::availablePrinterNames()' in (r/'core/PrintService.cpp').read_text(encoding='utf-8') and 'QPrintPreviewDialog' in (r/'core/PrintService.cpp').read_text(encoding='utf-8'),
  'search API':'searchText' in h and 'pageText' in cpp,
  'real text selection':'textSelection' in h and 'getSelection(page' in qtcpp and 'textSelection' in cap,
  'continuous viewer capability':'continuousPageViewer' in cap,

@@ -30,7 +30,7 @@ ApplicationWindow {
                 wrapMode: Text.Wrap
                 Layout.fillWidth: true
             }
-            Label { text: updateManager.status; wrapMode: Text.Wrap; Layout.fillWidth: true }
+            Label { text: tx(updateManager.status); wrapMode: Text.Wrap; Layout.fillWidth: true }
             ProgressBar { Layout.fillWidth: true; from: 0; to: 100; value: updateManager.progress; visible: updateManager.busy && updateManager.available }
             Button { text: tx("updater.download"); enabled: updateManager.available && !updateManager.busy && !updateManager.ready; onClicked: updateManager.download() }
             Button { text: tx("updater.install"); visible: updateManager.ready; onClicked: updateManager.install() }
@@ -1236,49 +1236,138 @@ ApplicationWindow {
     }
 
     function openPrintOptions(currentPageOnly, preview) {
-        printOptions.currentPageOnly = currentPageOnly
-        printOptions.preview = preview
+        printOptions.document = pdfDocument
+        printOptions.previewFirst = preview
+        printerChoice.model = printService.printers()
+        printerChoice.currentIndex = printerChoice.count > 0 ? 0 : -1
+        printFrom.value = currentPageOnly ? pdfDocument.currentPage + 1 : 1
+        printTo.value = currentPageOnly ? printFrom.value : pdfDocument.pageCount
+        printCopies.value = 1
+        printOrientation.currentIndex = 0
+        actualPrintSize.checked = true
+        printScale.value = 100
         printOptions.open()
     }
 
     Dialog {
         id: printOptions
-        property bool currentPageOnly: false
-        property bool preview: false
-        title: tx("print.scale_title")
+        property var document: null
+        property bool previewFirst: false
+        title: tx("action.print")
         modal: true
         anchors.centerIn: parent
-        width: Math.min(410, win.width - 32)
-        standardButtons: Dialog.Ok | Dialog.Cancel
-        onOpened: {
-            actualPrintSize.checked = true
-            printScale.value = 100
-        }
-        onAccepted: {
-            var percent = actualPrintSize.checked ? 100 : printScale.value
+        width: Math.min(520, win.width - 32)
+
+        function submit(preview) {
+            var settings = {
+                printer: printerChoice.currentValue || "",
+                paper: printPaper.currentValue || "",
+                from: printFrom.value,
+                to: printTo.value,
+                copies: printCopies.value,
+                landscape: printOrientation.currentIndex === 1,
+                scale: actualPrintSize.checked ? 100 : printScale.value
+            }
             if (preview)
-                printService.printPreview(pdfDocument, currentPageOnly, percent)
-            else
-                printService.printDocument(pdfDocument, currentPageOnly, percent)
+                printService.printPreview(document, settings)
+            else if (printService.printDocument(document, settings))
+                close()
         }
-        ColumnLayout {
+
+        GridLayout {
             width: parent.width
-            RadioButton { id: actualPrintSize; text: tx("print.actual_size"); checked: true }
-            RadioButton { id: customPrintSize; text: tx("print.custom_scale") }
+            columns: 2
+            columnSpacing: 16
+            rowSpacing: 10
+            Label { text: tx("print.printer") }
+            ComboBox {
+                id: printerChoice
+                Layout.fillWidth: true
+                textRole: "name"
+                valueRole: "name"
+                displayText: count ? currentText : tx("print.error.no_printer")
+                Accessible.name: tx("print.printer")
+            }
+            Label { text: tx("print.paper") }
+            ComboBox {
+                id: printPaper
+                Layout.fillWidth: true
+                model: printerChoice.currentValue ? printService.paperSizes(printerChoice.currentValue) : []
+                textRole: "name"
+                valueRole: "key"
+                displayText: count ? currentText : tx("print.default_paper")
+                Accessible.name: tx("print.paper")
+                onModelChanged: currentIndex = count ? 0 : -1
+            }
+            Label { text: tx("print.orientation") }
+            ComboBox {
+                id: printOrientation
+                Layout.fillWidth: true
+                model: [tx("print.portrait"), tx("print.landscape")]
+                Accessible.name: tx("print.orientation")
+            }
+            Label { text: tx("print.pages") }
+            RowLayout {
+                Label { text: tx("print.from") }
+                SpinBox {
+                    id: printFrom
+                    from: 1
+                    to: printOptions.document ? Math.max(1, printOptions.document.pageCount) : 1
+                    editable: true
+                    Accessible.name: tx("print.from")
+                }
+                Label { text: tx("print.to") }
+                SpinBox {
+                    id: printTo
+                    from: 1
+                    to: printFrom.to
+                    editable: true
+                    Accessible.name: tx("print.to")
+                }
+            }
+            Label { text: tx("print.copies") }
             SpinBox {
-                id: printScale
-                enabled: customPrintSize.checked
-                from: 10
-                to: 400
-                value: 100
+                id: printCopies
+                from: 1
+                to: 99
                 editable: true
-                Accessible.name: tx("print.custom_scale")
+                Accessible.name: tx("print.copies")
+            }
+            Label { text: tx("print.scale_title"); Layout.alignment: Qt.AlignTop }
+            ColumnLayout {
+                RadioButton { id: actualPrintSize; text: tx("print.actual_size"); checked: true }
+                RadioButton { id: customPrintSize; text: tx("print.custom_scale") }
+                SpinBox {
+                    id: printScale
+                    enabled: customPrintSize.checked
+                    from: 10
+                    to: 400
+                    value: 100
+                    editable: true
+                    Accessible.name: tx("print.custom_scale")
+                }
             }
             Label {
+                Layout.columnSpan: 2
                 Layout.fillWidth: true
                 text: tx("print.scale_hint")
                 wrapMode: Text.WordWrap
             }
+        }
+        footer: DialogButtonBox {
+            Button {
+                text: tx("action.print")
+                highlighted: !printOptions.previewFirst
+                enabled: printerChoice.currentIndex >= 0 && printFrom.value <= printTo.value
+                onClicked: printOptions.submit(false)
+            }
+            Button {
+                text: tx("action.print_preview")
+                highlighted: printOptions.previewFirst
+                enabled: printFrom.value <= printTo.value
+                onClicked: printOptions.submit(true)
+            }
+            Button { text: tx("dialog.cancel"); onClicked: printOptions.reject() }
         }
     }
 
