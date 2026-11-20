@@ -91,22 +91,33 @@ jobs:
           $log = Join-Path $env:LOCALAPPDATA "MaenPDF\MaenPDF\logs\maenpdf.log"
           Remove-Item $log -Force -ErrorAction SilentlyContinue
           $proc = Start-Process -FilePath "$PWD\dist\MaenPDF.exe" -WorkingDirectory "$PWD\dist" -PassThru
-          Start-Sleep -Seconds 8
-          if ($proc.HasExited) {
-            if (Test-Path $log) { Get-Content $log -Tail 150 | Write-Host }
-            throw "MaenPDF.exe exited during native Windows startup smoke test with code $($proc.ExitCode)"
+          try {
+            $deadline = (Get-Date).AddSeconds(30)
+            do {
+              $proc.Refresh()
+              if ($proc.HasExited) {
+                throw "MaenPDF.exe exited during native Windows startup with code $($proc.ExitCode)"
+              }
+              if ((Test-Path $log) -and ((Get-Content $log -Raw) -match 'Main window created successfully')) {
+                return
+              }
+              Start-Sleep -Milliseconds 500
+            } while ((Get-Date) -lt $deadline)
+            throw "MaenPDF main window was not confirmed within 30 seconds"
+          } catch {
+            Write-Host "::error::$($_.Exception.Message)"
+            if (Test-Path $log) {
+              Get-Content $log -Tail 12 | ForEach-Object {
+                $message = $_.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+                Write-Host "::error::$message"
+              }
+            }
+            throw
+          } finally {
+            if (!$proc.HasExited) {
+              Stop-Process -Id $proc.Id -Force
+            }
           }
-          if (!(Test-Path $log)) {
-            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-            throw "MaenPDF startup log was not created"
-          }
-          $logText = Get-Content $log -Raw
-          $logText | Write-Host
-          if ($logText -notmatch "Main window created successfully") {
-            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-            throw "MaenPDF process started but the main QML window was not confirmed"
-          }
-          Stop-Process -Id $proc.Id -Force
 
       - name: Smoke test staged MaenPDF opening PDF fixture
         shell: pwsh
