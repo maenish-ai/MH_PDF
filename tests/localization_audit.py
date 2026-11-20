@@ -18,6 +18,12 @@ def visible_arabic(v):
 checks['Arabic catalog has Arabic for every entry']=all(k == 'app.brand' or re.search(r'[\u0600-\u06FF]',visible_arabic(v)) for k,v in ar.items())
 checks['Arabic catalog has no stray Latin UI words']=all(not re.search(r'[A-Za-z]{2,}',visible_arabic(v)) for v in ar.values())
 checks['MaenPDF brand is exact in both languages']=en.get('app.brand') == 'MaenPDF' and ar.get('app.brand') == 'MaenPDF'
+version_labels = ('app.window_title', 'home.title', 'dialog.about_body')
+checks['version labels use the running application version'] = all(
+    '%1' in en.get(key, '') and '%1' in ar.get(key, '')
+    and f'tx("{key}", [Qt.application.version])' in qml
+    for key in version_labels
+)
 refs=set(re.findall(r'tx\("([^"]+)"',qml))
 checks['all QML translation keys exist']=refs <= set(en)
 msg=set(re.findall(r'(?:errorOccurred|info|fail|done)\(QStringLiteral\("([^"]+)"\)',allcpp))

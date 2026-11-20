@@ -11,7 +11,7 @@ ApplicationWindow {
     minimumHeight: 650
     visible: true
     color: appSettings.darkMode ? "#111827" : "#eef1f5"
-    title: (pdfDocument && pdfDocument.modified ? "• " : "") + displayDocumentTitle() + " — " + tx("app.window_title")
+    title: (pdfDocument && pdfDocument.modified ? "• " : "") + displayDocumentTitle() + " — " + tx("app.window_title", [Qt.application.version])
     LayoutMirroring.enabled: i18n.rtl
     LayoutMirroring.childrenInherit: true
 
@@ -1126,7 +1126,7 @@ ApplicationWindow {
             spacing: 10
             Label { text: "◈"; font.pixelSize: 52; color: accentColor; Layout.alignment: Qt.AlignHCenter }
             Label { text: tx("dialog.about_product"); font.pixelSize: 22; font.bold: true; Layout.alignment: Qt.AlignHCenter }
-            Label { text: tx("dialog.about_body"); horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; Layout.preferredWidth: 480 }
+            Label { text: tx("dialog.about_body", [Qt.application.version]); horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; Layout.preferredWidth: 480 }
             Label { text: tx("dialog.about_license"); color: mutedColor; Layout.alignment: Qt.AlignHCenter }
             Button { text: tx("action.project_page"); Layout.alignment: Qt.AlignHCenter; onClicked: appSettings.openProjectPage() }
             Button { text: tx("action.support"); enabled: appSettings.supportAvailable; Layout.alignment: Qt.AlignHCenter; onClicked: appSettings.openSupportPage() }
@@ -2016,7 +2016,7 @@ ApplicationWindow {
                     anchors.top: parent.top
                     anchors.topMargin: 42
                     spacing: 18
-                    Label { text: tx("home.title"); font.pixelSize: 32; font.bold: true; color: textColor; Layout.alignment: Qt.AlignHCenter }
+                    Label { text: tx("home.title", [Qt.application.version]); font.pixelSize: 32; font.bold: true; color: textColor; Layout.alignment: Qt.AlignHCenter }
                     Label { text: tx("home.subtitle"); font.pixelSize: 15; color: mutedColor; wrapMode: Text.WordWrap; horizontalAlignment: Text.AlignHCenter; Layout.fillWidth: true }
                     RowLayout {
                         Layout.alignment: Qt.AlignHCenter

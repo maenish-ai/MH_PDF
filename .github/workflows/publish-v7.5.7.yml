@@ -1,8 +1,8 @@
-name: Publish MaenPDF v7.5.6
+name: Publish MaenPDF v7.5.7
 
 on:
   push:
-    tags: [v7.5.6]
+    tags: [v7.5.7]
   workflow_dispatch:
 
 permissions:
@@ -10,12 +10,12 @@ permissions:
 
 env:
   QT_VERSION: '6.11.2'
-  RELEASE_VERSION: '7.5.6'
-  RELEASE_TAG: 'v7.5.6'
+  RELEASE_VERSION: '7.5.7'
+  RELEASE_TAG: 'v7.5.7'
 
 jobs:
   publish:
-    name: Build and publish v7.5.6
+    name: Build and publish v7.5.7
     runs-on: windows-2022
 
     steps:
@@ -24,24 +24,24 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Verify repository version is 7.5.6
+      - name: Verify repository version is 7.5.7
         shell: pwsh
         run: |
           $cmake = Get-Content "CMakeLists.txt" -Raw
           $main = Get-Content "app/main.cpp" -Raw
           $iss = Get-Content "installer/MaenPDF.iss" -Raw
 
-          if ($cmake -notmatch 'project\(MaenPDF VERSION 7\.5\.6') {
-            throw "CMakeLists.txt is not version 7.5.6"
+          if ($cmake -notmatch 'project\(MaenPDF VERSION 7\.5\.7') {
+            throw "CMakeLists.txt is not version 7.5.7"
           }
-          if ($main -notmatch 'setApplicationVersion\(QStringLiteral\("7\.5\.6"\)\)') {
-            throw "app/main.cpp is not version 7.5.6"
+          if ($main -notmatch 'setApplicationVersion\(QStringLiteral\("7\.5\.7"\)\)') {
+            throw "app/main.cpp is not version 7.5.7"
           }
-          if ($iss -notmatch '#define MyAppVersion "7\.5\.6"') {
-            throw "installer/MaenPDF.iss is not version 7.5.6"
+          if ($iss -notmatch '#define MyAppVersion "7\.5\.7"') {
+            throw "installer/MaenPDF.iss is not version 7.5.7"
           }
 
-      - name: Stop if v7.5.6 already exists
+      - name: Stop if v7.5.7 already exists
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -159,24 +159,24 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force release-assets | Out-Null
-          Copy-Item "installer-output\MaenPDF-Setup.exe" "release-assets\MaenPDF-7.5.6-Setup.exe" -Force
+          Copy-Item "installer-output\MaenPDF-Setup.exe" "release-assets\MaenPDF-7.5.7-Setup.exe" -Force
 
-          $hash = (Get-FileHash "release-assets\MaenPDF-7.5.6-Setup.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash *MaenPDF-7.5.6-Setup.exe" | Set-Content "release-assets\SHA256SUMS.txt" -Encoding ascii
+          $hash = (Get-FileHash "release-assets\MaenPDF-7.5.7-Setup.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash *MaenPDF-7.5.7-Setup.exe" | Set-Content "release-assets\SHA256SUMS.txt" -Encoding ascii
 
-          Write-Host "MaenPDF-Setup.exe SHA-256: $hash"
+          Write-Host "MaenPDF-7.5.7-Setup.exe SHA-256: $hash"
 
-      - name: Publish GitHub Release v7.5.6 as Latest
+      - name: Publish GitHub Release v7.5.7 as Latest
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$env:RELEASE_TAG" `
-            "release-assets\MaenPDF-7.5.6-Setup.exe" `
+            "release-assets\MaenPDF-7.5.7-Setup.exe" `
             "release-assets\SHA256SUMS.txt" `
             --target "${{ github.sha }}" `
-            --title "MaenPDF v7.5.6" `
-            --notes "Print directly from a single dialog with printer, paper, page range, copies, and scale. The updater no longer reuses an older cached installer." `
+            --title "MaenPDF v7.5.7" `
+            --notes "Show the running MaenPDF version in the window title, home screen, and About dialog in English and Arabic." `
             --latest
 
       - name: Verify GitHub latest release
@@ -186,20 +186,20 @@ jobs:
         run: |
           $json = gh api "repos/${{ github.repository }}/releases/latest" | ConvertFrom-Json
 
-          if ($json.tag_name -ne "v7.5.6") {
-            throw "GitHub latest release is $($json.tag_name), expected v7.5.6"
+          if ($json.tag_name -ne "v7.5.7") {
+            throw "GitHub latest release is $($json.tag_name), expected v7.5.7"
           }
 
-          $setup = $json.assets | Where-Object { $_.name -eq "MaenPDF-7.5.6-Setup.exe" } | Select-Object -First 1
+          $setup = $json.assets | Where-Object { $_.name -eq "MaenPDF-7.5.7-Setup.exe" } | Select-Object -First 1
           if ($null -eq $setup) {
-            throw "Latest release does not contain MaenPDF-7.5.6-Setup.exe"
+            throw "Latest release does not contain MaenPDF-7.5.7-Setup.exe"
           }
 
           if ($setup.digest -notmatch '^sha256:[0-9a-fA-F]{64}$') {
             throw "GitHub did not expose a valid SHA-256 asset digest yet."
           }
 
-          Write-Host "SUCCESS: GitHub latest release is v7.5.6"
+          Write-Host "SUCCESS: GitHub latest release is v7.5.7"
 
       - name: Remove temporary signing certificate
         if: always()

@@ -79,7 +79,7 @@ int main(int argc, char *argv[])
     QGuiApplication::setOrganizationName(QStringLiteral("MaenPDF"));
     QGuiApplication::setOrganizationDomain(QStringLiteral("maenpdf.local"));
     QGuiApplication::setApplicationName(QStringLiteral("MaenPDF"));
-    QGuiApplication::setApplicationVersion(QStringLiteral("7.5.6"));
+    QGuiApplication::setApplicationVersion(QStringLiteral("7.5.7"));
     AppLogger::install();
 
     // Bound image decoder allocations before any user-controlled image is
@@ -123,8 +123,8 @@ int main(int argc, char *argv[])
     QDir::setCurrent(QCoreApplication::applicationDirPath());
 
     AppLogger::write(QStringLiteral("INFO"),
-                     QStringLiteral("MaenPDF 7.5.6 startup; Qt %1; appDir=%2; cwd=%3; QT_QUICK_BACKEND=%4")
-                         .arg(QString::fromLatin1(qVersion()),
+                     QStringLiteral("MaenPDF %1 startup; Qt %2; appDir=%3; cwd=%4; QT_QUICK_BACKEND=%5")
+                         .arg(QCoreApplication::applicationVersion(), QString::fromLatin1(qVersion()),
                               QCoreApplication::applicationDirPath(),
                               QDir::currentPath(),
                               qEnvironmentVariable("QT_QUICK_BACKEND")));
