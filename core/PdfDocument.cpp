@@ -385,8 +385,8 @@ QImage PdfDocument::renderBase(const PageItem &page, const QSize &requestedSize)
     QSize finalSize = requestedSize;
     if (!finalSize.isValid())
         finalSize = (page.points * 1.35).toSize();
-    finalSize.setWidth(qBound(64, finalSize.width(), MemoryPolicy::maxRenderDimension()));
-    finalSize.setHeight(qBound(64, finalSize.height(), MemoryPolicy::maxRenderDimension()));
+    finalSize.setWidth(qBound(1, finalSize.width(), MemoryPolicy::maxRenderDimension()));
+    finalSize.setHeight(qBound(1, finalSize.height(), MemoryPolicy::maxRenderDimension()));
 
     const int rotation = ((page.rotation % 360) + 360) % 360;
     QSize sourceSize = finalSize;
@@ -403,6 +403,8 @@ QImage PdfDocument::renderBase(const PageItem &page, const QSize &requestedSize)
     }
 
     if (image.isNull()) {
+        if (page.sourceBacked() || !page.base.isNull())
+            return {};
         image = QImage(sourceSize, QImage::Format_ARGB32_Premultiplied);
         image.fill(Qt::white);
     }

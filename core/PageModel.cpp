@@ -201,14 +201,15 @@ QImage PageModel::renderPage(int row, const QSize &requestedSize) const {
     if (!size.isValid() || size.width() < 2 || size.height() < 2)
         size = defaultPixelSize(page);
     const int maxDim = MemoryPolicy::maxRenderDimension();
-    size.setWidth(qBound(64, size.width(), maxDim));
-    size.setHeight(qBound(64, size.height(), maxDim));
-    // Bucket nearby zoom requests so wheel/pinch zoom does not create a new
-    // full-size cached bitmap for every one-pixel size change.
+    // Quantize the longest edge, then derive the other edge from the PDF's
+    // aspect ratio. Independent rounding can shift page content and overlays.
     const int bucket = MemoryPolicy::performanceProfile() == QStringLiteral("eco") ? 128
                      : MemoryPolicy::performanceProfile() == QStringLiteral("balanced") ? 96 : 64;
-    size.setWidth(qMin(maxDim, qMax(64, ((size.width() + bucket / 2) / bucket) * bucket)));
-    size.setHeight(qMin(maxDim, qMax(64, ((size.height() + bucket / 2) / bucket) * bucket)));
+    const int requestedEdge = qBound(64, qMax(size.width(), size.height()), maxDim);
+    const int edge = qBound(64, ((requestedEdge + bucket / 2) / bucket) * bucket, maxDim);
+    size = page.points.scaled(edge, edge, Qt::KeepAspectRatio).toSize();
+    size.setWidth(qMax(1, size.width()));
+    size.setHeight(qMax(1, size.height()));
 
     const QString key = QStringLiteral("%1:%2:%3x%4").arg(page.uid).arg(page.revision).arg(size.width()).arg(size.height());
     {
@@ -221,19 +222,25 @@ QImage PageModel::renderPage(int row, const QSize &requestedSize) const {
     }
 
     QImage base;
-    if (m_renderer)
+    if (m_renderer) {
         base = m_renderer(page, size);
-    if (base.isNull()) {
+        if (base.isNull())
+            return {};
+        if (base.size() != size)
+            base = base.scaled(size, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+    } else {
         base = QImage(size, QImage::Format_ARGB32_Premultiplied);
         base.fill(Qt::white);
-    } else if (base.size() != size) {
-        base = base.scaled(size, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
     }
 
-    if (base.format() != QImage::Format_ARGB32_Premultiplied)
-        base = base.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    base.convertTo(QImage::Format_ARGB32_Premultiplied);
+    if (base.isNull())
+        return {};
 
     QPainter painter(&base);
+    painter.setCompositionMode(QPainter::CompositionMode_DestinationOver);
+    painter.fillRect(base.rect(), Qt::white);
+    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
 

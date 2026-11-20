@@ -1,6 +1,7 @@
 #include "PrintService.h"
 #include "PdfDocument.h"
 #include "PageModel.h"
+#include "MemoryPolicy.h"
 
 #ifndef Q_OS_ANDROID
 #include <QAbstractPrintDialog>
@@ -21,10 +22,11 @@ bool PrintService::available() const {
 #endif
 }
 
-bool PrintService::printDocument(QObject *documentObject, bool currentPageOnly) {
+bool PrintService::printDocument(QObject *documentObject, bool currentPageOnly, int scalePercent) {
 #ifdef Q_OS_ANDROID
     Q_UNUSED(documentObject)
     Q_UNUSED(currentPageOnly)
+    Q_UNUSED(scalePercent)
     emit operationFailed(QStringLiteral("print.error.unavailable"), {});
     return false;
 #else
@@ -48,7 +50,7 @@ bool PrintService::printDocument(QObject *documentObject, bool currentPageOnly) 
     if (dialog.exec() != QDialog::Accepted)
         return true;
 
-    const bool ok = paintDocument(document, &printer, currentPageOnly);
+    const bool ok = paintDocument(document, &printer, currentPageOnly, scalePercent);
     if (ok)
         emit operationFinished(QStringLiteral("print.done"), {});
     else
@@ -57,10 +59,11 @@ bool PrintService::printDocument(QObject *documentObject, bool currentPageOnly) 
 #endif
 }
 
-bool PrintService::printPreview(QObject *documentObject, bool currentPageOnly) {
+bool PrintService::printPreview(QObject *documentObject, bool currentPageOnly, int scalePercent) {
 #ifdef Q_OS_ANDROID
     Q_UNUSED(documentObject)
     Q_UNUSED(currentPageOnly)
+    Q_UNUSED(scalePercent)
     emit operationFailed(QStringLiteral("print.error.unavailable"), {});
     return false;
 #else
@@ -72,11 +75,12 @@ bool PrintService::printPreview(QObject *documentObject, bool currentPageOnly) {
 
     QPrinter printer(QPrinter::HighResolution);
     printer.setDocName(document->title());
+    printer.setFullPage(false);
     QPrintPreviewDialog preview(&printer);
     preview.setWindowTitle(QStringLiteral("MaenPDF"));
     connect(&preview, &QPrintPreviewDialog::paintRequested, this,
-            [this, document, currentPageOnly](QPrinter *requestedPrinter) {
-                paintDocument(document, requestedPrinter, currentPageOnly);
+            [this, document, currentPageOnly, scalePercent](QPrinter *requestedPrinter) {
+                paintDocument(document, requestedPrinter, currentPageOnly, scalePercent);
             });
     preview.exec();
     return true;
@@ -84,7 +88,7 @@ bool PrintService::printPreview(QObject *documentObject, bool currentPageOnly) {
 }
 
 #ifndef Q_OS_ANDROID
-bool PrintService::paintDocument(PdfDocument *document, QPrinter *printer, bool currentPageOnly) const {
+bool PrintService::paintDocument(PdfDocument *document, QPrinter *printer, bool currentPageOnly, int scalePercent) const {
     if (!document || !printer || !document->pageModel() || document->pageCount() <= 0)
         return false;
 
@@ -100,6 +104,16 @@ bool PrintService::paintDocument(PdfDocument *document, QPrinter *printer, bool 
     if (!painter.begin(printer))
         return false;
 
+    // PDF dimensions are in points (72 per inch). The printer painter
+    // already starts at the printable origin when fullPage is false.
+    const int dpi = printer->resolution();
+    const QSize printable = printer->pageLayout().paintRectPixels(dpi).size();
+    const PageModel *model = document->pageModel();
+    const qreal pixelsPerPoint = dpi / 72.0 * (qBound(10, scalePercent, 400) / 100.0);
+    const int maxDimension = MemoryPolicy::maxRenderDimension();
+    painter.setRenderHint(QPainter::SmoothPixmapTransform);
+    painter.setClipRect(QRectF(QPointF(), QSizeF(printable)));
+
     bool ok = true;
     for (int pageIndex = first; pageIndex <= last; ++pageIndex) {
         if (pageIndex > first && !printer->newPage()) {
@@ -107,22 +121,20 @@ bool PrintService::paintDocument(PdfDocument *document, QPrinter *printer, bool 
             break;
         }
 
-        const QRect paintRect = printer->pageLayout().paintRectPixels(printer->resolution());
-        QSize renderTarget = paintRect.size();
-        renderTarget.setWidth(qBound(800, renderTarget.width(), 4200));
-        renderTarget.setHeight(qBound(800, renderTarget.height(), 6000));
-        const QImage page = document->pageModel()->renderPage(pageIndex, renderTarget);
+        const QSizeF points(model->pageWidth(pageIndex), model->pageHeight(pageIndex));
+        const QSizeF target = points * pixelsPerPoint;
+        QSizeF raster = target;
+        if (raster.width() > maxDimension || raster.height() > maxDimension)
+            raster.scale(maxDimension, maxDimension, Qt::KeepAspectRatio);
+        const QImage page = model->renderPage(pageIndex, raster.toSize());
         if (page.isNull()) {
             ok = false;
             break;
         }
 
-        QSize target = page.size();
-        target.scale(paintRect.size(), Qt::KeepAspectRatio);
-        const QRect destination(
-            paintRect.x() + (paintRect.width() - target.width()) / 2,
-            paintRect.y() + (paintRect.height() - target.height()) / 2,
-            target.width(), target.height());
+        const QRectF destination((printable.width() - target.width()) / 2,
+                                 (printable.height() - target.height()) / 2,
+                                 target.width(), target.height());
         painter.drawImage(destination, page);
     }
     painter.end();

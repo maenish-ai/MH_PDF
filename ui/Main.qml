@@ -73,7 +73,7 @@ ApplicationWindow {
     readonly property var highlightColors: ["#fff176", "#ffb74d", "#81c784", "#64b5f6", "#ba68c8", "#f48fb1", "#4dd0e1"]
     property var customHighlightColors: []
     readonly property var availableHighlightColors: highlightColors.concat(customHighlightColors)
-    property bool syncingPageFromScroll: false
+    property bool positioningPage: false
     property bool homeVisible: true
     property bool allowWindowClose: false
     property int pendingCloseTab: -1
@@ -182,11 +182,15 @@ ApplicationWindow {
     function navigateToPage(index, positionMode) {
         if (!pdfDocument || !documentView || pdfDocument.pageCount <= 0)
             return
-        var target = Math.max(0, Math.min(pdfDocument.pageCount - 1, index))
-        pdfDocument.currentPage = target
+        var document = pdfDocument
+        var target = Math.max(0, Math.min(document.pageCount - 1, index))
+        document.currentPage = target
         Qt.callLater(function() {
-            if (documentView)
-                documentView.positionViewAtIndex(target, positionMode === undefined ? ListView.Beginning : positionMode)
+            if (document !== pdfDocument || document.currentPage !== target || target >= documentView.count)
+                return
+            positioningPage = true
+            documentView.positionViewAtIndex(target, positionMode === undefined ? ListView.Beginning : positionMode)
+            positioningPage = false
         })
         homeVisible = false
     }
@@ -1231,6 +1235,53 @@ ApplicationWindow {
         }
     }
 
+    function openPrintOptions(currentPageOnly, preview) {
+        printOptions.currentPageOnly = currentPageOnly
+        printOptions.preview = preview
+        printOptions.open()
+    }
+
+    Dialog {
+        id: printOptions
+        property bool currentPageOnly: false
+        property bool preview: false
+        title: tx("print.scale_title")
+        modal: true
+        anchors.centerIn: parent
+        width: Math.min(410, win.width - 32)
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        onOpened: {
+            actualPrintSize.checked = true
+            printScale.value = 100
+        }
+        onAccepted: {
+            var percent = actualPrintSize.checked ? 100 : printScale.value
+            if (preview)
+                printService.printPreview(pdfDocument, currentPageOnly, percent)
+            else
+                printService.printDocument(pdfDocument, currentPageOnly, percent)
+        }
+        ColumnLayout {
+            width: parent.width
+            RadioButton { id: actualPrintSize; text: tx("print.actual_size"); checked: true }
+            RadioButton { id: customPrintSize; text: tx("print.custom_scale") }
+            SpinBox {
+                id: printScale
+                enabled: customPrintSize.checked
+                from: 10
+                to: 400
+                value: 100
+                editable: true
+                Accessible.name: tx("print.custom_scale")
+            }
+            Label {
+                Layout.fillWidth: true
+                text: tx("print.scale_hint")
+                wrapMode: Text.WordWrap
+            }
+        }
+    }
+
     Dialog {
         id: goToPageDlg
         title: tx("dialog.go_to_page")
@@ -1322,7 +1373,7 @@ ApplicationWindow {
             }
             Button { text: tx("action.open"); Layout.fillWidth: true; visible: commandSearch.text === "" || text.toLowerCase().indexOf(commandSearch.text.toLowerCase()) >= 0; onClicked: { commandDlg.close(); openDlg.open() } }
             Button { text: tx("action.save"); Layout.fillWidth: true; visible: commandSearch.text === "" || text.toLowerCase().indexOf(commandSearch.text.toLowerCase()) >= 0; onClicked: { commandDlg.close(); pdfDocument.filePath === "" ? saveDlg.open() : pdfDocument.save() } }
-            Button { text: tx("action.print"); Layout.fillWidth: true; enabled: printService.available; visible: commandSearch.text === "" || text.toLowerCase().indexOf(commandSearch.text.toLowerCase()) >= 0; onClicked: { commandDlg.close(); printService.printDocument(pdfDocument, false) } }
+            Button { text: tx("action.print"); Layout.fillWidth: true; enabled: printService.available; visible: commandSearch.text === "" || text.toLowerCase().indexOf(commandSearch.text.toLowerCase()) >= 0; onClicked: { commandDlg.close(); openPrintOptions(false, false) } }
             Button { text: tx("action.find"); Layout.fillWidth: true; visible: commandSearch.text === "" || text.toLowerCase().indexOf(commandSearch.text.toLowerCase()) >= 0; onClicked: { commandDlg.close(); searchDlg.open() } }
             Button { text: tx("action.compare"); Layout.fillWidth: true; enabled: pdfDocument.filePath !== ""; visible: commandSearch.text === "" || text.toLowerCase().indexOf(commandSearch.text.toLowerCase()) >= 0; onClicked: { commandDlg.close(); compareDlg.open() } }
             Button { text: tx("action.ocr"); Layout.fillWidth: true; enabled: pdfDocument.filePath !== ""; visible: commandSearch.text === "" || text.toLowerCase().indexOf(commandSearch.text.toLowerCase()) >= 0; onClicked: { commandDlg.close(); if (requireProvider("qpdf") && requireProvider("tesseract")) ocrDlg.open() } }
@@ -1340,7 +1391,7 @@ ApplicationWindow {
     Shortcut { sequences: [StandardKey.Open]; onActivated: openDlg.open() }
     Shortcut { sequences: [StandardKey.Save]; onActivated: pdfDocument.filePath === "" ? saveDlg.open() : pdfDocument.save() }
     Shortcut { sequences: [StandardKey.Find]; onActivated: searchDlg.open() }
-    Shortcut { sequences: [StandardKey.Print]; enabled: printService.available; onActivated: printService.printDocument(pdfDocument, false) }
+    Shortcut { sequences: [StandardKey.Print]; enabled: printService.available; onActivated: openPrintOptions(false, false) }
     Shortcut { sequences: [StandardKey.Undo]; onActivated: if (pdfDocument.canUndo) pdfDocument.undo() }
     Shortcut { sequences: [StandardKey.Redo]; onActivated: if (pdfDocument.canRedo) pdfDocument.redo() }
     Shortcut { sequences: [StandardKey.Copy]; enabled: !keyboardTextInputActive(); onActivated: selectedText !== "" ? pdfDocument.copyTextToClipboard(selectedText) : pdfDocument.copyPage(pdfDocument.currentPage) }
@@ -1418,9 +1469,9 @@ ApplicationWindow {
             Action { text: tx("action.sanitize_privacy"); enabled: pdfDocument.filePath !== ""; onTriggered: { toolOutputDlg.operation = "safeFlatten"; toolOutputDlg.open() } }
             }
             MenuSeparator {}
-            Action { text: tx("action.print"); enabled: printService.available; onTriggered: printService.printDocument(pdfDocument, false) }
-            Action { text: tx("action.print_current"); enabled: printService.available; onTriggered: printService.printDocument(pdfDocument, true) }
-            Action { text: tx("action.print_preview"); enabled: printService.available; onTriggered: printService.printPreview(pdfDocument, false) }
+            Action { text: tx("action.print"); enabled: printService.available; onTriggered: openPrintOptions(false, false) }
+            Action { text: tx("action.print_current"); enabled: printService.available; onTriggered: openPrintOptions(true, false) }
+            Action { text: tx("action.print_preview"); enabled: printService.available; onTriggered: openPrintOptions(false, true) }
             MenuSeparator {}
             Action { text: tx("action.properties"); onTriggered: propertiesDlg.open() }
             Action { text: tx("action.close_tab"); onTriggered: requestCloseTab(documentManager.currentIndex) }
@@ -1622,7 +1673,7 @@ ApplicationWindow {
                 ToolButton { text: tx("action.open"); onClicked: openDlg.open() }
                 ToolButton { text: tx("action.import_web_pdf"); onClicked: webPdfImportDlg.open() }
                 ToolButton { text: tx("action.save"); onClicked: pdfDocument.filePath === "" ? saveDlg.open() : pdfDocument.save() }
-                ToolButton { text: tx("action.print"); enabled: printService.available; onClicked: printService.printDocument(pdfDocument, false) }
+                ToolButton { text: tx("action.print"); enabled: printService.available; onClicked: openPrintOptions(false, false) }
                 ToolButton { text: tx("dialog.find"); onClicked: searchDlg.open() }
                 Item { Layout.fillWidth: true }
                 Label { text: displayDocumentTitle(); color: mutedColor; elide: Text.ElideMiddle; Layout.maximumWidth: 330 }
@@ -2005,15 +2056,15 @@ ApplicationWindow {
                 ListView {
                     id: documentView
                     anchors.fill: parent
+                    anchors.bottomMargin: pageNavigation.height
                     orientation: ListView.Vertical
                     flickableDirection: Flickable.AutoFlickIfNeeded
                     spacing: 18
                     clip: true
                     reuseItems: true
-                    cacheBuffer: zoomRenderTimer.running ? 0
-                                 : appSettings.performanceProfile === "eco" ? Math.round(height * 0.20)
-                                 : appSettings.performanceProfile === "performance" ? Math.round(height * 1.0)
-                                 : Math.round(height * 0.55)
+                    cacheBuffer: zoomRenderTimer.running ? 0 : Math.round(Math.max(0, height) *
+                                 (appSettings.performanceProfile === "eco" ? 0.20
+                                  : appSettings.performanceProfile === "performance" ? 1.0 : 0.55))
                     model: pdfDocument.pages
                     // currentIndex is intentionally not bound to currentPage. A
                     // binding here makes ListView try to reposition itself when
@@ -2027,18 +2078,15 @@ ApplicationWindow {
                     ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
 
                     onContentYChanged: {
-                        if (!moving && !flicking && count <= 0)
+                        if (positioningPage || count <= 0)
                             return
                         var probeX = contentX + Math.max(1, width / 2)
                         var probeY = contentY + Math.max(1, height / 2)
                         var idx = indexAt(probeX, probeY)
                         if (idx < 0)
                             idx = indexAt(contentX + 20, contentY + 20)
-                        if (idx >= 0 && idx !== pdfDocument.currentPage) {
-                            syncingPageFromScroll = true
+                        if (idx >= 0 && idx !== pdfDocument.currentPage)
                             pdfDocument.currentPage = idx
-                            Qt.callLater(function() { syncingPageFromScroll = false })
-                        }
                     }
 
                     delegate: Item {
@@ -2134,10 +2182,30 @@ ApplicationWindow {
                                 source: pageImage
                             }
 
+                            Image {
+                                id: pageFallback
+                                anchors.fill: parent
+                                source: pageImg.status === Image.Error ? pageDelegate.pageImage : ""
+                                sourceSize.width: 104
+                                sourceSize.height: 147
+                                fillMode: Image.Stretch
+                                cache: false
+                                asynchronous: true
+                            }
+
                             BusyIndicator {
                                 anchors.centerIn: parent
-                                running: pageImg.status === Image.Loading
+                                running: pageImg.status === Image.Loading || pageFallback.status === Image.Loading
                                 visible: running
+                            }
+
+                            Label {
+                                anchors.centerIn: parent
+                                width: Math.max(0, Math.min(parent.width - 16, implicitWidth))
+                                visible: pageFallback.status === Image.Error
+                                text: tx("status.page_render_failed")
+                                color: "#374151"
+                                wrapMode: Text.WordWrap
                             }
 
                             Repeater {
@@ -2519,6 +2587,74 @@ ApplicationWindow {
                     }
 
                     footer: Item { width: documentView.width; height: 30 }
+                }
+
+                Rectangle {
+                    id: pageNavigation
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    visible: !pdfFullScreenMode
+                    height: visible ? navigationControls.implicitHeight + 8 : 0
+                    color: panelColor
+                    border.color: borderColor
+
+                    RowLayout {
+                        id: navigationControls
+                        anchors.centerIn: parent
+                        LayoutMirroring.enabled: false
+
+                        ToolButton {
+                            text: "←"
+                            enabled: pdfDocument.currentPage > 0
+                            Accessible.name: tx("action.previous_page")
+                            ToolTip.visible: hovered
+                            ToolTip.text: Accessible.name
+                            onClicked: navigateToPage(pdfDocument.currentPage - 1)
+                        }
+                        TextField {
+                            id: pageNumber
+                            Layout.preferredWidth: Math.max(64, metrics.advanceWidth + 24)
+                            horizontalAlignment: TextInput.AlignHCenter
+                            selectByMouse: true
+                            inputMethodHints: Qt.ImhDigitsOnly
+                            Accessible.name: tx("dialog.page_number")
+                            validator: IntValidator {
+                                bottom: 1
+                                top: Math.max(1, pdfDocument.pageCount)
+                                locale: i18n.rtl ? "ar" : "en"
+                            }
+                            TextMetrics {
+                                id: metrics
+                                font: pageNumber.font
+                                text: i18n.number(pdfDocument.pageCount)
+                            }
+                            Binding on text {
+                                when: !pageNumber.activeFocus
+                                value: i18n.number(pdfDocument.currentPage + 1)
+                                restoreMode: Binding.RestoreNone
+                            }
+                            onActiveFocusChanged: if (activeFocus) selectAll()
+                            onAccepted: {
+                                var page = Number.fromLocaleString(Qt.locale(validator.locale), text)
+                                navigateToPage(page - 1)
+                                documentView.forceActiveFocus()
+                            }
+                            Keys.onEscapePressed: documentView.forceActiveFocus()
+                        }
+                        Label {
+                            text: "/ " + i18n.number(pdfDocument.pageCount)
+                            color: mutedColor
+                        }
+                        ToolButton {
+                            text: "→"
+                            enabled: pdfDocument.currentPage + 1 < pdfDocument.pageCount
+                            Accessible.name: tx("action.next_page")
+                            ToolTip.visible: hovered
+                            ToolTip.text: Accessible.name
+                            onClicked: navigateToPage(pdfDocument.currentPage + 1)
+                        }
+                    }
                 }
             }
 

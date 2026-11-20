@@ -13,8 +13,8 @@ public:
 
     bool available() const;
 
-    Q_INVOKABLE bool printDocument(QObject *documentObject, bool currentPageOnly = false);
-    Q_INVOKABLE bool printPreview(QObject *documentObject, bool currentPageOnly = false);
+    Q_INVOKABLE bool printDocument(QObject *documentObject, bool currentPageOnly = false, int scalePercent = 100);
+    Q_INVOKABLE bool printPreview(QObject *documentObject, bool currentPageOnly = false, int scalePercent = 100);
 
 signals:
     void operationFinished(QString key, QVariantList args);
@@ -22,6 +22,6 @@ signals:
 
 private:
 #ifndef Q_OS_ANDROID
-    bool paintDocument(PdfDocument *document, class QPrinter *printer, bool currentPageOnly) const;
+    bool paintDocument(PdfDocument *document, class QPrinter *printer, bool currentPageOnly, int scalePercent) const;
 #endif
 };
