@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: maenpdf-signed-release-${{ github.event.workflow_run.head_sha || github.sha }}
@@ -20,7 +20,7 @@ env:
 jobs:
   prepare:
     name: Prepare signed release
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -96,6 +96,8 @@ jobs:
     name: Build, sign and publish Windows release
     needs: prepare
     if: ${{ needs.prepare.outputs.exists == 'false' && needs.prepare.outputs.signing_ready == 'true' }}
+    permissions:
+      contents: write
     runs-on: windows-2022
     steps:
       - name: Checkout exact release commit
@@ -201,7 +203,7 @@ jobs:
         run: |
           $setup = (Resolve-Path "installer-output\MaenPDF-Setup.exe").Path
           $setupSig = Get-AuthenticodeSignature $setup
-          if ($setupSig.Status -ne 'Valid') { throw "Installer signature is not valid: $($setupSig.Status)" }
+          if ($setupSig.Status -ne 'Valid' -or !$setupSig.TimeStamperCertificate) { throw "Installer signature or timestamp is invalid: $($setupSig.Status)" }
 
           $installDir = Join-Path $env:RUNNER_TEMP 'MaenPDF-Signed-Release-Smoke'
           $args = @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$installDir")
@@ -211,7 +213,7 @@ jobs:
           $installedExe = Join-Path $installDir 'MaenPDF.exe'
           if (!(Test-Path $installedExe)) { throw "Installed MaenPDF.exe is missing" }
           $exeSig = Get-AuthenticodeSignature $installedExe
-          if ($exeSig.Status -ne 'Valid') { throw "Installed MaenPDF.exe signature is not valid: $($exeSig.Status)" }
+          if ($exeSig.Status -ne 'Valid' -or !$exeSig.TimeStamperCertificate) { throw "Installed MaenPDF.exe signature or timestamp is invalid: $($exeSig.Status)" }
           if ($setupSig.SignerCertificate.Thumbprint -ne $exeSig.SignerCertificate.Thumbprint) {
             throw "Installer and MaenPDF.exe were not signed by the same certificate"
           }

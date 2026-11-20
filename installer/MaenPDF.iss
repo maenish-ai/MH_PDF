@@ -47,6 +47,7 @@ Name: "resetsettings"; Description: "Reset MaenPDF preferences and cache"; Group
 Type: filesandordirs; Name: "{app}\*"
 
 [Files]
+Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dist\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]

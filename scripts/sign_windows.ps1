@@ -2,7 +2,7 @@ param(
     [Parameter(Mandatory = $true)][string]$File,
     [Parameter(Mandatory = $true)][string]$PfxPath,
     [Parameter(Mandatory = $true)][string]$PfxPassword,
-    [string]$TimestampUrl = "http://timestamp.digicert.com"
+    [string]$TimestampUrl = "https://timestamp.digicert.com"
 )
 
 $ErrorActionPreference = "Stop"
@@ -45,7 +45,7 @@ Write-Host "Signing $File with SHA-256 and RFC3161 timestamp..."
     $File
 if ($LASTEXITCODE -ne 0) { throw "signtool sign failed with exit code $LASTEXITCODE" }
 
-& $signtool.FullName verify /pa /all /v $File
+& $signtool.FullName verify /pa /all /tw /v $File
 if ($LASTEXITCODE -ne 0) { throw "Authenticode verification failed for $File" }
 
 $signature = Get-AuthenticodeSignature -FilePath $File
@@ -54,6 +54,10 @@ if ($signature.Status -ne 'Valid') {
 }
 if (-not $signature.SignerCertificate) {
     throw "No signer certificate was found after signing"
+}
+
+if (-not $signature.TimeStamperCertificate) {
+    throw "No trusted timestamp certificate was found after signing"
 }
 
 Write-Host "Authenticode valid. Publisher certificate subject: $($signature.SignerCertificate.Subject)"
