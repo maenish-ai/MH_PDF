@@ -19,6 +19,9 @@ try {
     }
     & $qpdf --version
     if ($LASTEXITCODE -ne 0) { throw "Bundled qpdf could not start (exit $LASTEXITCODE)" }
+    # Keep the Windows app's normal environment. Direct checks above prove
+    # the provider executables can start with only the system PATH.
+    $env:PATH = $oldPath
     $inputPdf = Join-Path $fixtureDir 'scan.pdf'
     $outputPdf = Join-Path $fixtureDir 'searchable.pdf'
     $arguments = @('--ocr-smoke', ('"{0}"' -f $inputPdf), ('"{0}"' -f $outputPdf))

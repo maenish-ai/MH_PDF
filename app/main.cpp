@@ -147,6 +147,18 @@ int main(int argc, char *argv[])
                          .arg(MemoryPolicy::totalSystemMemoryMB())
                          .arg(imageAllocationLimitMB));
 
+    const QStringList launchArguments = QCoreApplication::arguments();
+    if (launchArguments.value(1) == QStringLiteral("--ocr-smoke")) {
+        PdfToolsService tools;
+        if (launchArguments.size() != 4 ||
+            !runOcrSmoke(tools, launchArguments.at(2), launchArguments.at(3))) {
+            AppLogger::write(QStringLiteral("FATAL"), QStringLiteral("OCR_SMOKE_FAILED"));
+            return EXIT_FAILURE;
+        }
+        AppLogger::write(QStringLiteral("INFO"), QStringLiteral("OCR_SMOKE_PASS"));
+        return EXIT_SUCCESS;
+    }
+
 #ifdef Q_OS_WIN
     // Use Qt's accelerated renderer by default. Software rendering is kept as a
     // deterministic safe mode for old/broken GPU drivers. A startup marker lets
@@ -186,18 +198,6 @@ int main(int argc, char *argv[])
 
     QGuiApplication::setWindowIcon(
         QIcon(QStringLiteral(":/qt/qml/PDFStudio/assets/maenpdf-logo.svg")));
-
-    const QStringList launchArguments = QCoreApplication::arguments();
-    if (launchArguments.value(1) == QStringLiteral("--ocr-smoke")) {
-        PdfToolsService tools;
-        if (launchArguments.size() != 4 ||
-            !runOcrSmoke(tools, launchArguments.at(2), launchArguments.at(3))) {
-            AppLogger::write(QStringLiteral("FATAL"), QStringLiteral("OCR_SMOKE_FAILED"));
-            return EXIT_FAILURE;
-        }
-        AppLogger::write(QStringLiteral("INFO"), QStringLiteral("OCR_SMOKE_PASS"));
-        return EXIT_SUCCESS;
-    }
 
     LanguageManager languageManager;
     AppSettings appSettings;

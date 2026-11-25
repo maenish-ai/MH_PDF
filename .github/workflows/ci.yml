@@ -186,7 +186,7 @@ jobs:
             if ($logText -match $pattern) { throw "Runtime error detected during interaction smoke test: $pattern" }
           }
 
-      - name: Verify staged bilingual OCR without external providers
+      - name: Verify staged bilingual OCR and bundled dependencies
         shell: pwsh
         run: ./scripts/smoke_windows_ocr.ps1 -InstalledExe "dist/MaenPDF.exe"
 
