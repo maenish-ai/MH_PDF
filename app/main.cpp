@@ -53,12 +53,14 @@
 namespace {
 bool runOcrSmoke(PdfToolsService &tools, const QString &input, const QString &output)
 {
+    AppLogger::write(QStringLiteral("INFO"), QStringLiteral("OCR smoke: checking providers"));
     const QStringList languages = tools.ocrLanguages();
     if (!languages.contains(QStringLiteral("eng")) || !languages.contains(QStringLiteral("ara"))) {
         AppLogger::write(QStringLiteral("ERROR"), QStringLiteral("OCR language data unavailable"));
         return false;
     }
 
+    AppLogger::write(QStringLiteral("INFO"), QStringLiteral("OCR smoke: creating raster fixture"));
     QImage scan(1000, 1414, QImage::Format_RGB32);
     scan.fill(Qt::white);
     {
@@ -83,10 +85,12 @@ bool runOcrSmoke(PdfToolsService &tools, const QString &input, const QString &ou
             return false;
     }
 
+    AppLogger::write(QStringLiteral("INFO"), QStringLiteral("OCR smoke: processing fixture"));
     if (!tools.ocrToSearchablePdf(input, output, QStringLiteral("eng+ara"), 150)) {
         AppLogger::write(QStringLiteral("ERROR"), QStringLiteral("Bilingual OCR PDF generation failed"));
         return false;
     }
+    AppLogger::write(QStringLiteral("INFO"), QStringLiteral("OCR smoke: verifying searchable pages"));
     QPdfDocument result;
     if (result.load(output) != QPdfDocument::Error::None || result.pageCount() != 2)
         return false;

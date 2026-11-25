@@ -25,7 +25,10 @@ try {
     $inputPdf = Join-Path $fixtureDir 'scan.pdf'
     $outputPdf = Join-Path $fixtureDir 'searchable.pdf'
     $arguments = @('--ocr-smoke', ('"{0}"' -f $inputPdf), ('"{0}"' -f $outputPdf))
-    $process = Start-Process -FilePath $InstalledExe -ArgumentList $arguments -PassThru
+    $stdout = Join-Path $fixtureDir 'stdout.log'
+    $stderr = Join-Path $fixtureDir 'stderr.log'
+    $process = Start-Process -FilePath $InstalledExe -ArgumentList $arguments -PassThru `
+        -WorkingDirectory $appDir -RedirectStandardOutput $stdout -RedirectStandardError $stderr
     if (!$process.WaitForExit(120000)) {
         Stop-Process -Id $process.Id -Force
         throw 'Bundled OCR timed out'
@@ -39,6 +42,14 @@ try {
         Get-Content -LiteralPath $log -Tail 12 | ForEach-Object {
             $message = $_.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
             Write-Host "::error::$message"
+        }
+    }
+    foreach ($stream in @($stdout, $stderr)) {
+        if ($stream -and (Test-Path -LiteralPath $stream)) {
+            Get-Content -LiteralPath $stream -Tail 10 | ForEach-Object {
+                $message = $_.Replace('%', '%25')
+                Write-Host "::error::$message"
+            }
         }
     }
     throw
