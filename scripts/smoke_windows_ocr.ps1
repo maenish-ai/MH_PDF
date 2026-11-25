@@ -22,7 +22,7 @@ try {
     # Keep the Windows app's normal environment. Direct checks above prove
     # the provider executables can start with only the system PATH.
     $env:PATH = $oldPath
-    $inputPdf = Join-Path $fixtureDir 'scan.pdf'
+    $inputPdf = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../tests/fixtures/ocr-bilingual-scan.pdf')).Path
     $outputPdf = Join-Path $fixtureDir 'searchable.pdf'
     $arguments = @('--ocr-smoke', ('"{0}"' -f $inputPdf), ('"{0}"' -f $outputPdf))
     $stdout = Join-Path $fixtureDir 'stdout.log'

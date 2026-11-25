@@ -8,10 +8,8 @@
 #endif
 #include <QIcon>
 #include <QImageReader>
-#include <QPainter>
 #include <QPdfDocument>
 #include <QPdfSelection>
-#include <QPdfWriter>
 #include <QRegularExpression>
 #include <QQuickStyle>
 #include <QQuickWindow>
@@ -58,31 +56,6 @@ bool runOcrSmoke(PdfToolsService &tools, const QString &input, const QString &ou
     if (!languages.contains(QStringLiteral("eng")) || !languages.contains(QStringLiteral("ara"))) {
         AppLogger::write(QStringLiteral("ERROR"), QStringLiteral("OCR language data unavailable"));
         return false;
-    }
-
-    AppLogger::write(QStringLiteral("INFO"), QStringLiteral("OCR smoke: creating raster fixture"));
-    QImage scan(1000, 1414, QImage::Format_RGB32);
-    scan.fill(Qt::white);
-    {
-        QPainter painter(&scan);
-        QFont font(QStringLiteral("Arial"));
-        font.setPixelSize(60);
-        painter.setFont(font);
-        painter.drawText(QRect(70, 150, 860, 110), Qt::AlignCenter, QStringLiteral("Invoice number 12345"));
-        painter.drawText(QRect(70, 360, 860, 110), Qt::AlignCenter, QStringLiteral("\u0645\u0631\u062d\u0628\u0627 \u0628\u0627\u0644\u0644\u063a\u0629 \u0627\u0644\u0639\u0631\u0628\u064a\u0629"));
-    }
-    {
-        QPdfWriter writer(input);
-        writer.setResolution(144);
-        QPainter painter(&writer);
-        if (!painter.isActive())
-            return false;
-        painter.drawImage(painter.viewport(), scan);
-        if (!writer.newPage())
-            return false;
-        painter.drawImage(painter.viewport(), scan);
-        if (!painter.end())
-            return false;
     }
 
     AppLogger::write(QStringLiteral("INFO"), QStringLiteral("OCR smoke: processing fixture"));
