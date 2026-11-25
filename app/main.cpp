@@ -187,6 +187,18 @@ int main(int argc, char *argv[])
     QGuiApplication::setWindowIcon(
         QIcon(QStringLiteral(":/qt/qml/PDFStudio/assets/maenpdf-logo.svg")));
 
+    const QStringList launchArguments = QCoreApplication::arguments();
+    if (launchArguments.value(1) == QStringLiteral("--ocr-smoke")) {
+        PdfToolsService tools;
+        if (launchArguments.size() != 4 ||
+            !runOcrSmoke(tools, launchArguments.at(2), launchArguments.at(3))) {
+            AppLogger::write(QStringLiteral("FATAL"), QStringLiteral("OCR_SMOKE_FAILED"));
+            return EXIT_FAILURE;
+        }
+        AppLogger::write(QStringLiteral("INFO"), QStringLiteral("OCR_SMOKE_PASS"));
+        return EXIT_SUCCESS;
+    }
+
     LanguageManager languageManager;
     AppSettings appSettings;
     DocumentManager documentManager(&appSettings);
@@ -219,18 +231,8 @@ int main(int argc, char *argv[])
     QFile::remove(graphicsMarker);
 #endif
 
-    const QStringList launchArguments = QCoreApplication::arguments();
     if (launchArguments.size() > 1) {
         const QString firstArgument = launchArguments.at(1);
-        if (firstArgument == QStringLiteral("--ocr-smoke")) {
-            if (launchArguments.size() != 4 ||
-                !runOcrSmoke(pdfTools, launchArguments.at(2), launchArguments.at(3))) {
-                AppLogger::write(QStringLiteral("FATAL"), QStringLiteral("OCR_SMOKE_FAILED"));
-                return EXIT_FAILURE;
-            }
-            AppLogger::write(QStringLiteral("INFO"), QStringLiteral("OCR_SMOKE_PASS"));
-            return EXIT_SUCCESS;
-        }
         if (firstArgument == QStringLiteral("--interaction-smoke")) {
             if (launchArguments.size() < 3 || !documentManager.openDocument(launchArguments.at(2))) {
                 AppLogger::write(QStringLiteral("FATAL"), QStringLiteral("INTERACTION_SMOKE_OPEN_FAILED"));
