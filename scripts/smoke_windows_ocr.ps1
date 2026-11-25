@@ -9,6 +9,16 @@ $oldPath = $env:PATH
 try {
     # Do not let MSYS2 or system-wide OCR installations supply missing files.
     $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+    $appDir = Split-Path -Parent $InstalledExe
+    $tesseract = Join-Path $appDir 'tools/tesseract/tesseract.exe'
+    $qpdf = Join-Path $appDir 'tools/qpdf/qpdf.exe'
+    $tessdata = Join-Path $appDir 'tools/tesseract/tessdata'
+    $languages = & $tesseract --list-langs --tessdata-dir $tessdata
+    if ($LASTEXITCODE -ne 0 -or $languages -notcontains 'eng' -or $languages -notcontains 'ara') {
+        throw "Bundled Tesseract could not load Arabic and English (exit $LASTEXITCODE)"
+    }
+    & $qpdf --version
+    if ($LASTEXITCODE -ne 0) { throw "Bundled qpdf could not start (exit $LASTEXITCODE)" }
     $inputPdf = Join-Path $fixtureDir 'scan.pdf'
     $outputPdf = Join-Path $fixtureDir 'searchable.pdf'
     $arguments = @('--ocr-smoke', ('"{0}"' -f $inputPdf), ('"{0}"' -f $outputPdf))
@@ -18,9 +28,17 @@ try {
         throw 'Bundled OCR timed out'
     }
     if ($process.ExitCode -ne 0 -or !(Test-Path -LiteralPath $outputPdf)) {
-        if (Test-Path -LiteralPath $log) { Get-Content -LiteralPath $log -Tail 30 }
         throw "Bundled bilingual OCR failed with exit code $($process.ExitCode)"
     }
+} catch {
+    Write-Host "::error::$($_.Exception.Message)"
+    if (Test-Path -LiteralPath $log) {
+        Get-Content -LiteralPath $log -Tail 12 | ForEach-Object {
+            $message = $_.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Host "::error::$message"
+        }
+    }
+    throw
 } finally {
     $env:PATH = $oldPath
     Remove-Item -LiteralPath $fixtureDir -Recurse -Force

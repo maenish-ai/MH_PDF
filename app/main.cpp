@@ -54,8 +54,10 @@ namespace {
 bool runOcrSmoke(PdfToolsService &tools, const QString &input, const QString &output)
 {
     const QStringList languages = tools.ocrLanguages();
-    if (!languages.contains(QStringLiteral("eng")) || !languages.contains(QStringLiteral("ara")))
+    if (!languages.contains(QStringLiteral("eng")) || !languages.contains(QStringLiteral("ara"))) {
+        AppLogger::write(QStringLiteral("ERROR"), QStringLiteral("OCR language data unavailable"));
         return false;
+    }
 
     QImage scan(1000, 1414, QImage::Format_RGB32);
     scan.fill(Qt::white);
@@ -81,16 +83,20 @@ bool runOcrSmoke(PdfToolsService &tools, const QString &input, const QString &ou
             return false;
     }
 
-    if (!tools.ocrToSearchablePdf(input, output, QStringLiteral("eng+ara"), 150))
+    if (!tools.ocrToSearchablePdf(input, output, QStringLiteral("eng+ara"), 150)) {
+        AppLogger::write(QStringLiteral("ERROR"), QStringLiteral("Bilingual OCR PDF generation failed"));
         return false;
+    }
     QPdfDocument result;
     if (result.load(output) != QPdfDocument::Error::None || result.pageCount() != 2)
         return false;
     const QRegularExpression arabic(QStringLiteral("[\\x{0621}-\\x{064A}]{3,}"));
     for (int page = 0; page < result.pageCount(); ++page) {
         const QString text = result.getAllText(page).text();
-        if (!text.contains(QStringLiteral("Invoice"), Qt::CaseInsensitive) || !arabic.match(text).hasMatch())
+        if (!text.contains(QStringLiteral("Invoice"), Qt::CaseInsensitive) || !arabic.match(text).hasMatch()) {
+            AppLogger::write(QStringLiteral("ERROR"), QStringLiteral("OCR smoke page %1 missing bilingual text").arg(page + 1));
             return false;
+        }
     }
     return true;
 }
