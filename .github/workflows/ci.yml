@@ -81,6 +81,9 @@ jobs:
             -BuildExe "build/Release/MaenPDF.exe" `
             -DistDir "dist"
 
+      - name: Bundle Arabic and English OCR
+        uses: ./.github/actions/windows-ocr
+
       - name: Smoke test staged MaenPDF with native Windows platform
         shell: pwsh
         run: |
@@ -214,6 +217,7 @@ jobs:
 
           $installedExe = Join-Path $installDir 'MaenPDF.exe'
           if (!(Test-Path $installedExe)) { throw "Installed MaenPDF.exe is missing" }
+          ./scripts/smoke_windows_ocr.ps1 -InstalledExe $installedExe
           if (!(Test-Path (Join-Path $installDir 'platforms\qwindows.dll'))) { throw "Installed qwindows.dll is missing" }
           if (!(Test-Path (Join-Path $installDir 'Qt6Pdf.dll'))) { throw "Installed Qt6Pdf.dll is missing" }
           if (!(Test-Path (Join-Path $installDir 'Qt6Widgets.dll'))) { throw "Installed Qt6Widgets.dll is missing" }

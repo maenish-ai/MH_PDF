@@ -8,6 +8,11 @@
 #endif
 #include <QIcon>
 #include <QImageReader>
+#include <QPainter>
+#include <QPdfDocument>
+#include <QPdfSelection>
+#include <QPdfWriter>
+#include <QRegularExpression>
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
@@ -46,6 +51,50 @@
 #include "../core/UpdateManager.h"
 
 namespace {
+bool runOcrSmoke(PdfToolsService &tools, const QString &input, const QString &output)
+{
+    const QStringList languages = tools.ocrLanguages();
+    if (!languages.contains(QStringLiteral("eng")) || !languages.contains(QStringLiteral("ara")))
+        return false;
+
+    QImage scan(1000, 1414, QImage::Format_RGB32);
+    scan.fill(Qt::white);
+    {
+        QPainter painter(&scan);
+        QFont font(QStringLiteral("Arial"));
+        font.setPixelSize(60);
+        painter.setFont(font);
+        painter.drawText(QRect(70, 150, 860, 110), Qt::AlignCenter, QStringLiteral("Invoice number 12345"));
+        painter.drawText(QRect(70, 360, 860, 110), Qt::AlignCenter, QStringLiteral("\u0645\u0631\u062d\u0628\u0627 \u0628\u0627\u0644\u0644\u063a\u0629 \u0627\u0644\u0639\u0631\u0628\u064a\u0629"));
+    }
+    {
+        QPdfWriter writer(input);
+        writer.setResolution(144);
+        QPainter painter(&writer);
+        if (!painter.isActive())
+            return false;
+        painter.drawImage(painter.viewport(), scan);
+        if (!writer.newPage())
+            return false;
+        painter.drawImage(painter.viewport(), scan);
+        if (!painter.end())
+            return false;
+    }
+
+    if (!tools.ocrToSearchablePdf(input, output, QStringLiteral("eng+ara"), 150))
+        return false;
+    QPdfDocument result;
+    if (result.load(output) != QPdfDocument::Error::None || result.pageCount() != 2)
+        return false;
+    const QRegularExpression arabic(QStringLiteral("[\\x{0621}-\\x{064A}]{3,}"));
+    for (int page = 0; page < result.pageCount(); ++page) {
+        const QString text = result.getAllText(page).text();
+        if (!text.contains(QStringLiteral("Invoice"), Qt::CaseInsensitive) || !arabic.match(text).hasMatch())
+            return false;
+    }
+    return true;
+}
+
 void showStartupFailure(const QString &details)
 {
     AppLogger::write(QStringLiteral("FATAL"), details);
@@ -79,7 +128,7 @@ int main(int argc, char *argv[])
     QGuiApplication::setOrganizationName(QStringLiteral("MaenPDF"));
     QGuiApplication::setOrganizationDomain(QStringLiteral("maenpdf.local"));
     QGuiApplication::setApplicationName(QStringLiteral("MaenPDF"));
-    QGuiApplication::setApplicationVersion(QStringLiteral("7.5.7"));
+    QGuiApplication::setApplicationVersion(QStringLiteral("7.5.8"));
     AppLogger::install();
 
     // Bound image decoder allocations before any user-controlled image is
@@ -167,6 +216,15 @@ int main(int argc, char *argv[])
     const QStringList launchArguments = QCoreApplication::arguments();
     if (launchArguments.size() > 1) {
         const QString firstArgument = launchArguments.at(1);
+        if (firstArgument == QStringLiteral("--ocr-smoke")) {
+            if (launchArguments.size() != 4 ||
+                !runOcrSmoke(pdfTools, launchArguments.at(2), launchArguments.at(3))) {
+                AppLogger::write(QStringLiteral("FATAL"), QStringLiteral("OCR_SMOKE_FAILED"));
+                return EXIT_FAILURE;
+            }
+            AppLogger::write(QStringLiteral("INFO"), QStringLiteral("OCR_SMOKE_PASS"));
+            return EXIT_SUCCESS;
+        }
         if (firstArgument == QStringLiteral("--interaction-smoke")) {
             if (launchArguments.size() < 3 || !documentManager.openDocument(launchArguments.at(2))) {
                 AppLogger::write(QStringLiteral("FATAL"), QStringLiteral("INTERACTION_SMOKE_OPEN_FAILED"));

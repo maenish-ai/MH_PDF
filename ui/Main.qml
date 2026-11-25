@@ -547,7 +547,7 @@ ApplicationWindow {
             else if (operation === "safeFlatten")
                 pdfTools.startSafeFlattenPdf(pdfDocument.filePath, selectedFile, 150)
             else if (operation === "ocr")
-                pdfTools.startOcrToSearchablePdf(pdfDocument.filePath, selectedFile, ocrLanguages.text, ocrDpi.value)
+                pdfTools.startOcrToSearchablePdf(pdfDocument.filePath, selectedFile, ocrDlg.languages, ocrDpi.value)
             else if (operation === "decrypt")
                 pdfTools.startDecryptPdf(pdfDocument.filePath, selectedFile, decryptPassword.text)
         }
@@ -936,6 +936,8 @@ ApplicationWindow {
 
     Dialog {
         id: ocrDlg
+        readonly property string languages: ocrLanguageMode.currentIndex === 3
+                                            ? ocrLanguages.text.trim() : ocrLanguageMode.currentValue
         title: tx("dialog.ocr_title")
         modal: true
         standardButtons: Dialog.NoButton
@@ -943,7 +945,26 @@ ApplicationWindow {
             anchors.fill: parent
             spacing: 10
             Label { text: tx("dialog.ocr_local_note"); wrapMode: Text.WordWrap; Layout.preferredWidth: 460 }
-            TextField { id: ocrLanguages; text: pdfTools.defaultOcrLanguages; Layout.fillWidth: true }
+            ComboBox {
+                id: ocrLanguageMode
+                Layout.fillWidth: true
+                Accessible.name: tx("dialog.ocr_language")
+                textRole: "label"
+                valueRole: "code"
+                model: [
+                    { label: tx("dialog.ocr_bilingual"), code: pdfTools.defaultOcrLanguages },
+                    { label: tx("language.english"), code: "eng" },
+                    { label: tx("language.arabic"), code: "ara" },
+                    { label: tx("dialog.ocr_custom"), code: "" }
+                ]
+            }
+            TextField {
+                id: ocrLanguages
+                visible: ocrLanguageMode.currentIndex === 3
+                text: pdfTools.defaultOcrLanguages
+                Accessible.name: tx("dialog.ocr_language")
+                Layout.fillWidth: true
+            }
             RowLayout {
                 Label { text: tx("dialog.dpi") }
                 SpinBox { id: ocrDpi; from: 100; to: 300; value: 150 }
@@ -954,7 +975,7 @@ ApplicationWindow {
             Button {
                 text: tx("dialog.create")
                 highlighted: true
-                enabled: providersState.qpdf && providersState.tesseract
+                enabled: providersState.qpdf && providersState.tesseract && ocrDlg.languages.length > 0
                 onClicked: {
                     toolOutputDlg.operation = "ocr"
                     ocrDlg.accept()

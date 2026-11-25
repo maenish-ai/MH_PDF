@@ -162,6 +162,9 @@ jobs:
             -BuildExe "build-release/Release/MaenPDF.exe" `
             -DistDir "dist"
 
+      - name: Bundle Arabic and English OCR
+        uses: ./.github/actions/windows-ocr
+
       - name: Sign MaenPDF application executable
         shell: pwsh
         env:
@@ -212,6 +215,7 @@ jobs:
 
           $installedExe = Join-Path $installDir 'MaenPDF.exe'
           if (!(Test-Path $installedExe)) { throw "Installed MaenPDF.exe is missing" }
+          ./scripts/smoke_windows_ocr.ps1 -InstalledExe $installedExe
           $exeSig = Get-AuthenticodeSignature $installedExe
           if ($exeSig.Status -ne 'Valid' -or !$exeSig.TimeStamperCertificate) { throw "Installed MaenPDF.exe signature or timestamp is invalid: $($exeSig.Status)" }
           if ($setupSig.SignerCertificate.Thumbprint -ne $exeSig.SignerCertificate.Thumbprint) {
@@ -224,11 +228,15 @@ jobs:
 
       - name: Prepare release assets and SHA-256 manifest
         shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           New-Item -ItemType Directory -Force release-assets | Out-Null
-          Copy-Item "installer-output\MaenPDF-Setup.exe" "release-assets\MaenPDF-Setup.exe" -Force
-          $hash = (Get-FileHash "release-assets\MaenPDF-Setup.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash *MaenPDF-Setup.exe" | Set-Content "release-assets\SHA256SUMS.txt" -Encoding ascii
+          $name = "MaenPDF-$env:RELEASE_VERSION-Setup.exe"
+          $asset = Join-Path 'release-assets' $name
+          Copy-Item "installer-output\MaenPDF-Setup.exe" $asset -Force
+          $hash = (Get-FileHash $asset -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash *$name" | Set-Content "release-assets\SHA256SUMS.txt" -Encoding ascii
           Get-Content "release-assets\SHA256SUMS.txt"
 
       - name: Preserve signed release artifact
@@ -244,9 +252,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.prepare.outputs.tag }}
           TARGET_SHA: ${{ needs.prepare.outputs.sha }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           gh release create "$env:TAG" `
-            "release-assets\MaenPDF-Setup.exe" `
+            "release-assets\MaenPDF-$env:RELEASE_VERSION-Setup.exe" `
             "release-assets\SHA256SUMS.txt" `
             --target "$env:TARGET_SHA" `
             --title "MaenPDF $env:TAG" `
