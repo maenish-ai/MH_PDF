@@ -127,6 +127,10 @@ int main(int argc, char *argv[])
     const QStringList launchArguments = QCoreApplication::arguments();
     if (launchArguments.value(1) == QStringLiteral("--ocr-smoke")) {
         PdfToolsService tools;
+        QObject::connect(&tools, &PdfToolsService::operationFailed, &app,
+                         [](const QString &key, const QVariantList &) {
+                             AppLogger::write(QStringLiteral("ERROR"), key);
+                         });
         if (launchArguments.size() != 4 ||
             !runOcrSmoke(tools, launchArguments.at(2), launchArguments.at(3))) {
             AppLogger::write(QStringLiteral("FATAL"), QStringLiteral("OCR_SMOKE_FAILED"));

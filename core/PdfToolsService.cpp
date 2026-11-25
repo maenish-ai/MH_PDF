@@ -80,6 +80,9 @@ QVariantMap PdfToolsService::providers() const {
 }
 
 QString PdfToolsService::normalizePath(const QString &path) const {
+    const QString nativePath = QDir::fromNativeSeparators(path);
+    if (QDir::isAbsolutePath(nativePath))
+        return QFileInfo(nativePath).absoluteFilePath();
     const QUrl url(path);
     if (url.isLocalFile())
         return QFileInfo(url.toLocalFile()).absoluteFilePath();
@@ -444,8 +447,10 @@ bool PdfToolsService::ocrToSearchablePdf(const QString &inputPath, const QString
     QPdfDocument document;
     QString errorKey;
     if (!loadPdf(document, inputPath, password, &errorKey)) { fail(errorKey); return false; }
-    const QString output = ensurePdfSuffix(normalizePath(outputPath));
-    if (output.isEmpty() || !ensureParent(output)) { fail(QStringLiteral("tools.error.path")); return false; }
+    const QString localOutput = normalizePath(outputPath);
+    if (localOutput.isEmpty()) { fail(QStringLiteral("tools.error.path")); return false; }
+    const QString output = ensurePdfSuffix(localOutput);
+    if (!ensureParent(output)) { fail(QStringLiteral("tools.error.path")); return false; }
 
     QTemporaryDir temporary;
     if (!temporary.isValid()) { fail(QStringLiteral("tools.error.temp")); return false; }
