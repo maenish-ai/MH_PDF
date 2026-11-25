@@ -33,7 +33,9 @@ bundle_executable qpdf "$dist/tools/qpdf"
 
 data="$dist/tools/tesseract/tessdata"
 mkdir -p "$data/configs"
-for file in ara.traineddata eng.traineddata osd.traineddata pdf.ttf configs/pdf; do
+# Tesseract embeds its searchable-PDF font. The MSYS2 build installs the
+# PDF renderer configuration and the language data as separate files.
+for file in ara.traineddata eng.traineddata osd.traineddata configs/pdf; do
     source="$prefix/share/tessdata/$file"
     cp "$source" "$data/$file"
     pacman -Qqo "$source" >> "$packages"
